@@ -34,19 +34,35 @@ or create a brand-new one by typing its name directly.
 
 ## Setup
 
-### 1. Install dependencies
+### 1. Create a virtual environment
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+If your system says `ensurepip` is missing, install the OS package for `venv`
+first, then rerun the command.
+
+### 2. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Run the app
+### 3. Run tests
+
+```bash
+python -m pytest tests/ -v
+```
+
+### 4. Run the app
 
 ```bash
 python main.py
 ```
 
-### 3. Configure folders
+### 5. Configure folders
 
 1. Open the **Settings** tab.
 2. Set your **School root folder**.
@@ -54,12 +70,39 @@ python main.py
 4. Optionally set a **Dev/test watch folder** for safe testing.
 5. Save settings.
 
+If you are using WSL, remember to use Linux-style paths such as
+`/mnt/c/Users/...` instead of Windows-style `C:\Users\...`.
+
+## Important Folder Roles
+
+Before training, make sure the team understands the difference between these 3
+folders:
+
+1. `train_School`
+This is the labeled source folder used for bootstrapping. Files here are
+already sorted into the correct subject folders.
+
+2. `watch folder`
+This is the incoming unsorted folder the app monitors. During testing, use a
+safe dev folder. In real use, this can be Downloads.
+
+3. `School root folder`
+This is the real destination. Sorted files are moved to
+`SchoolRoot/<Subject>/`.
+
+Recommended workflow:
+
+- use `train_School` for seeding
+- use a separate test folder for the watch folder
+- use `School` as the real destination root
+
 ## Training Data Bootstrap
 
 If you already organize files inside subject folders, seed the database first:
 
 ```bash
-python scripts/seed_data.py --school-root "C:\Users\You\Documents\School"
+python scripts/seed_data.py --school-root "/path/to/train_School" --dry-run
+python scripts/seed_data.py --school-root "/path/to/train_School"
 ```
 
 The script treats each top-level folder under the school root as a subject. Nested folders are allowed, but the label stays the top-level subject name.
@@ -74,6 +117,108 @@ School/
     week2/
       induction_notes.pdf
 ```
+
+Notes:
+
+- supported seed file types are `.pdf`, `.docx`, `.txt`, `.pptx`, and `.zip`
+- the seed script stores training samples in SQLite, but it does not train the
+  saved model files by itself
+- after seeding, open the app and click **Refresh Model**
+- avoid reseeding the exact same files repeatedly unless you intentionally want
+  duplicate training samples
+
+## First Training Run
+
+This is the safest step-by-step flow for a new teammate:
+
+1. Prepare `train_School`.
+Put already-correct school files into top-level subject folders such as
+`CS145`, `CS153`, `CS180`, `Arts1`, or `Arkiyo`.
+
+2. Seed the database.
+Run the dry run first, then the real seed command.
+
+3. Start the app.
+
+4. In **Settings**, set:
+- **School root folder** to the real destination folder
+- **Dev/test watch folder** to a safe test folder
+- **Downloads folder** to the real Downloads path if needed later
+
+5. Click these in order:
+- **Rescan Subject Folders**
+- **Save Settings**
+- **Refresh Model**
+
+6. Confirm that retraining finished.
+You should see `Model updated!` in the Settings tab and retrain logs in the
+terminal.
+
+7. Drop test files into the watch folder one at a time.
+
+8. Use Pending Decisions to teach the app:
+- **Accept** if the predicted subject is correct
+- **Change** if it is a school file but the subject is wrong
+- **Skip** only if it is not a school file
+
+9. After every few corrections, click **Refresh Model** again.
+Background retraining also triggers automatically after every 5 accepted or
+corrected decisions.
+
+10. Keep training until you have enough labeled examples.
+The default warm-up target is at least 25 confirmed school files overall and at
+least 5 confirmed files for a subject before auto-move becomes trustworthy.
+
+## Daily Use
+
+Once the model is reasonably trained:
+
+1. Leave the app running.
+2. Let it watch the configured folder.
+3. New files will either:
+- auto-move into `SchoolRoot/<Subject>/` if confidence is high and warm-up is off
+- appear in **Pending Decisions** if the app wants confirmation
+- be logged as not-school if they do not look school-related
+
+If the subject does not exist yet, the **Change** dialog can create a brand-new
+subject by typing its name directly.
+
+## How To Know The Model Is Trained
+
+The easiest checks are:
+
+1. The app says `Model updated!` after **Refresh Model**.
+2. The models folder contains saved pickles.
+
+Example check:
+
+```bash
+find "$HOME/OrgAIzer/models" -maxdepth 1 -type f | sort
+```
+
+Typical files:
+
+- `subject_predictor.pkl`
+- `course_predictor.pkl` for compatibility
+- `school_detector.pkl` if there are enough both school and not-school examples
+
+Important:
+
+- if `school_detector.pkl` is missing, that usually means the app has not seen
+  enough negative not-school examples yet
+- `subject_predictor.pkl` is the main file that confirms subject training worked
+
+## Training Tips
+
+- Keep subject folder names consistent. Do not mix `CS180`, `cs180`, and
+  `CS 180`.
+- Use `Change`, not `Skip`, when a school file is predicted with the wrong
+  subject.
+- Add some not-school examples too, so the school detector can learn both
+  classes.
+- PDFs, DOCX, PPTX, TXT, and ZIP files are stronger training examples than
+  image files because the app does not currently use OCR.
+- Use a separate dev watch folder until the team trusts the behavior.
 
 ## Models
 
@@ -90,6 +235,7 @@ School/
 - Warm-up starts enabled so the app asks for confirmation before it fully trusts auto-moves.
 - Every accepted/corrected decision becomes a new local training sample.
 - Background retraining is triggered after every 5 new corrections.
+- The default auto-move threshold is `0.85`.
 
 ## Project Structure
 
