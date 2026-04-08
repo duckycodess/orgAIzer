@@ -1,167 +1,131 @@
-# OrgAIzer — AI School File Sorter
+# OrgAIzer -- AI School Subject Sorter
 
-A desktop app for students that watches your Downloads folder, classifies new files as school-related or not, and moves them to the right course folder automatically.
+OrgAIzer is a desktop app for students that watches a download folder, decides whether a file is school-related, predicts its subject, and moves it into the matching subject folder.
+
+This repo originally experimented with a deeper `course/category` layout. The current version is intentionally simpler: it focuses on school files and sorts by subject only, which matches the team's latest scope and typical student workflow better.
 
 **Team:** Aaron Baclor, Tristan Noval, Jarelle Ricaforte, Gabrielle Sacramento  
-**Course:** CS 180 — AI for Everyday Life
+**Course:** CS 180 -- AI for Everyday Life
 
----
+## Project Context
 
-## Quick Start
+The project requirements ask for:
 
-### 1. Install Python 3.10+
+- a functional AI-powered app for an everyday problem
+- clear UX with actionable output
+- a personalization layer backed by local storage
+- a user feedback loop for corrections and retraining
 
-Make sure Python 3.10 or newer is installed. Check with:
-```
-python --version
-```
+Your proposal frames the core problem as semantic file organization for students and knowledge workers. This refactor stays aligned with that idea, but narrows the destination label to the thing students care about most during the semester: the subject.
 
-### 2. Install dependencies
+## Current Workflow
+
+1. A file appears in the watched folder.
+2. The app waits for the download to finish.
+3. It extracts filename/content features.
+4. `SchoolDetector` estimates whether the file is school-related.
+5. `SubjectPredictor` predicts the best subject folder.
+6. High-confidence predictions are auto-moved to `SchoolRoot/<Subject>/`.
+7. Lower-confidence predictions appear in Pending Decisions for user review.
+8. Accepted/corrected decisions are stored locally and used for retraining.
+
+In Pending Decisions, the `Change` dialog can now either pick an existing subject
+or create a brand-new one by typing its name directly.
+
+## Setup
+
+### 1. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Run the app
+### 2. Run the app
 
 ```bash
 python main.py
 ```
 
-### 4. First-time setup
+### 3. Configure folders
 
 1. Open the **Settings** tab.
-2. Set your **School root folder** (e.g. `C:\Users\You\Documents\School`).
-3. Click **Rescan Course Folders** — this discovers your existing course folders (CS180, CS145, etc.).
-4. Optionally set a **Dev/test watch folder** for safe testing without touching real Downloads.
-5. Click **Save Settings**.
+2. Set your **School root folder**.
+3. Click **Rescan Subject Folders** so the app learns the available subjects.
+4. Optionally set a **Dev/test watch folder** for safe testing.
+5. Save settings.
 
-### 5. Seed training data (recommended before demo)
+## Training Data Bootstrap
 
-Run the bootstrap script to pre-train the AI on your existing School folder structure:
+If you already organize files inside subject folders, seed the database first:
 
 ```bash
 python scripts/seed_data.py --school-root "C:\Users\You\Documents\School"
 ```
 
-Then click **Refresh Model** in the Settings tab.
+The script treats each top-level folder under the school root as a subject. Nested folders are allowed, but the label stays the top-level subject name.
 
----
+Examples:
 
-## How It Works
-
-### Pipeline (3 stages)
-
-```
-New file in Downloads
-  → Stability check (wait for download to finish)
-  → Feature extraction (filename, text content, ZIP members)
-  → Stage 1: School-related? (keyword rules + Logistic Regression)
-  → Stage 2: Which course? (course code regex + TF-IDF similarity)
-  → Stage 3: Which category? (keyword rules + Logistic Regression)
-  → High confidence (≥ 85%): auto-move
-  → Medium/Low confidence: show pending card → user decides
+```text
+School/
+  CS180/
+    cs180_lab3.pdf
+  Discrete Math/
+    week2/
+      induction_notes.pdf
 ```
 
-### Confidence Thresholds
+## Models
 
-| Level | Score | Behavior |
-|-------|-------|----------|
-| High | ≥ 85% | Auto-move (only after warm-up exits) |
-| Medium | 55–84% | Show recommendation, ask user |
-| Low | < 55% | Ask user |
+- `SchoolDetector`
+  - keyword rules for cold start
+  - TF-IDF + Logistic Regression once enough labeled data exists
+- `SubjectPredictor`
+  - subject/code matching
+  - token overlap and TF-IDF name similarity
+  - Logistic Regression overlay after enough user-confirmed samples
 
-Thresholds are configurable in the Settings tab.
+## Warm-up And Feedback
 
-### Warm-up Mode
-
-The app starts in **warm-up mode** — it always asks the user for the first 25 confirmed school files (or until you manually disable it in Settings). This prevents bad auto-moves before the AI has learned from your corrections.
-
-### Category Labels (fixed in v1)
-
-- Lectures
-- Labs
-- Exercises
-- Assignments
-- References
-- Others
-
-### Supported File Types
-
-- `.pdf` — text extracted via pdfplumber / PyMuPDF
-- `.docx` — text extracted via python-docx
-- `.pptx` — text extracted via python-pptx
-- `.txt` — read directly
-- `.zip` — member filenames inspected (no extraction)
-
----
+- Warm-up starts enabled so the app asks for confirmation before it fully trusts auto-moves.
+- Every accepted/corrected decision becomes a new local training sample.
+- Background retraining is triggered after every 5 new corrections.
 
 ## Project Structure
 
-```
+```text
 orgAIzer/
-├── main.py                   # Entry point
-├── requirements.txt
+├── main.py
 ├── app/
-│   ├── controller.py         # Central orchestrator
-│   └── settings.py           # Typed settings object
-├── core/
-│   ├── watcher.py            # File system watcher (watchdog)
-│   ├── stability.py          # Wait for download to finish
-│   ├── extractor.py          # Feature extraction
-│   └── mover.py              # Safe move + undo
+│   ├── controller.py
+│   └── settings.py
 ├── classifiers/
-│   ├── school_detector.py    # Stage 1: school vs not-school
-│   ├── course_predictor.py   # Stage 2: course prediction
-│   └── category_predictor.py # Stage 3: category prediction
-├── storage/
-│   ├── db.py                 # SQLite setup
-│   └── repository.py         # CRUD operations
+│   ├── school_detector.py
+│   ├── subject_predictor.py
+│   └── course_predictor.py      # compatibility wrapper
+├── core/
+│   ├── extractor.py
+│   ├── mover.py
+│   ├── stability.py
+│   └── watcher.py
 ├── scripts/
-│   └── seed_data.py          # Bootstrap training data
-├── ui/
-│   ├── main_window.py
-│   ├── history_widget.py
-│   ├── pending_widget.py
-│   └── settings_widget.py
-└── tests/
-    ├── test_classifiers.py
-    ├── test_mover.py
-    └── test_repository.py
+│   └── seed_data.py
+├── storage/
+│   ├── db.py
+│   └── repository.py
+├── tests/
+│   ├── test_classifiers.py
+│   ├── test_mover.py
+│   └── test_repository.py
+└── ui/
+    ├── history_widget.py
+    ├── main_window.py
+    ├── pending_widget.py
+    └── settings_widget.py
 ```
 
----
+## Notes
 
-## Running Tests
-
-```bash
-python -m pytest tests/ -v
-```
-
-All 44 tests should pass.
-
----
-
-## AI / Model Details
-
-- **Model:** TF-IDF vectorizer + Logistic Regression (scikit-learn)
-- **Why LR?** Works well on small datasets (200–500 samples), fast to retrain (<0.5s), produces calibrated probabilities, easy to explain in class.
-- **Cold start:** Keyword rules provide reliable predictions from day 1, before any training data exists.
-- **Retraining:** Happens automatically in the background after every 5 user corrections. Also triggerable manually via "Refresh Model" in Settings.
-- **Data:** All training data is local to your machine (stored in `%APPDATA%\OrgAIzer\`). No data leaves your computer.
-
----
-
-## Database Location
-
-```
-%APPDATA%\OrgAIzer\orgaizer.db
-```
-
-All events, corrections, and settings are stored here in SQLite.
-
-## Trained Models Location
-
-```
-%APPDATA%\OrgAIzer\models\
-```
+- All data stays local.
+- The SQLite schema still uses some legacy `course_*` column names internally for backward compatibility.
+- The user-facing product should now be treated as a subject sorter, not a course/category sorter.

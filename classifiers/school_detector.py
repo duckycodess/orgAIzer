@@ -145,7 +145,6 @@ class SchoolDetector:
                 max_iter=200,
                 class_weight="balanced",
                 solver="lbfgs",
-                multi_class="ovr",
             )),
         ])
         pipeline.fit(texts, labels)

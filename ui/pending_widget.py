@@ -1,20 +1,18 @@
 """
 ui/pending_widget.py -- Pending decisions tab.
 
-Each pending file shows as a card with:
+Each pending file shows:
   - filename
-  - predicted course + category
-  - overall confidence bar + color
-  - short AI reason ("Matched course code CS180 in filename")
-  - Accept / Change / Skip buttons
-
-"Change" opens a dialog with course and category dropdowns.
+  - predicted subject
+  - overall confidence
+  - short AI reason
+  - Accept / Change / Skip actions
 """
 
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor, QFont
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -31,10 +29,21 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.settings import CATEGORY_LABELS
-
 _CONF_HIGH = 0.85
 _CONF_MED = 0.55
+
+
+def _normalize_subject_input(subject: str) -> str:
+    return " ".join(subject.strip().split())
+
+
+def _is_valid_subject_input(subject: str) -> bool:
+    normalized = _normalize_subject_input(subject)
+    if not normalized:
+        return False
+    if normalized in {".", ".."}:
+        return False
+    return "/" not in normalized and "\\" not in normalized
 
 
 def _conf_color_hex(conf: float) -> str:
@@ -49,18 +58,17 @@ def _conf_label(conf: float) -> str:
     if conf >= _CONF_HIGH:
         return f"High confidence ({conf:.0%})"
     if conf >= _CONF_MED:
-        return f"Medium confidence ({conf:.0%}) — please review"
-    return f"Low confidence ({conf:.0%}) — please choose"
+        return f"Medium confidence ({conf:.0%}) -- please review"
+    return f"Low confidence ({conf:.0%}) -- please choose"
 
 
 class _ChangeDialog(QDialog):
-    """Dialog that lets the user pick a different course and category."""
+    """Dialog that lets the user pick or type a different subject."""
 
     def __init__(
         self,
-        course_names: list[str],
-        current_course: str,
-        current_category: str,
+        subject_names: list[str],
+        current_subject: str,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -69,53 +77,64 @@ class _ChangeDialog(QDialog):
 
         layout = QFormLayout(self)
 
-        self._course_combo = QComboBox()
-        self._course_combo.addItems(course_names)
-        idx = self._course_combo.findText(current_course)
-        if idx >= 0:
-            self._course_combo.setCurrentIndex(idx)
-        layout.addRow("Course:", self._course_combo)
+        self._subject_combo = QComboBox()
+        self._subject_combo.setEditable(True)
+        self._subject_combo.addItems(subject_names)
+        self._subject_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        initial_subject = (
+            ""
+            if _normalize_subject_input(current_subject) in {"", "Unknown"}
+            else _normalize_subject_input(current_subject)
+        )
+        self._subject_combo.setEditText(initial_subject)
+        self._subject_combo.lineEdit().setPlaceholderText(
+            "Choose an existing subject or type a new one"
+        )
+        layout.addRow("Subject:", self._subject_combo)
 
-        self._cat_combo = QComboBox()
-        self._cat_combo.addItems(CATEGORY_LABELS)
-        cidx = self._cat_combo.findText(current_category)
-        if cidx >= 0:
-            self._cat_combo.setCurrentIndex(cidx)
-        layout.addRow("Category:", self._cat_combo)
+        hint = QLabel("New subject names are allowed. Example: STS or Discrete Math")
+        hint.setStyleSheet("color: #888; font-style: italic; font-size: 10px;")
+        hint.setWordWrap(True)
+        layout.addRow("", hint)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
+        self._ok_button = buttons.button(QDialogButtonBox.StandardButton.Ok)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addRow(buttons)
 
-    def selected_course(self) -> str:
-        return self._course_combo.currentText()
+        self._subject_combo.lineEdit().textChanged.connect(self._update_ok_state)
+        self._update_ok_state()
 
-    def selected_category(self) -> str:
-        return self._cat_combo.currentText()
+    def _update_ok_state(self) -> None:
+        self._ok_button.setEnabled(
+            _is_valid_subject_input(self._subject_combo.currentText())
+        )
+
+    def selected_subject(self) -> str:
+        return _normalize_subject_input(self._subject_combo.currentText())
 
 
 class _PendingCard(QFrame):
     """A single card representing one pending file decision."""
 
-    accepted = Signal(int, str, str)   # event_id, course, category
-    changed = Signal(int, str, str)    # event_id, new_course, new_category
-    skipped = Signal(int)              # event_id
+    accepted = Signal(int, str)
+    changed = Signal(int, str)
+    skipped = Signal(int)
 
     def __init__(
         self,
         event: dict,
-        course_names: list[str],
+        subject_names: list[str],
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._event = event
-        self._course_names = course_names
+        self._subject_names = subject_names
         self._event_id = event["event_id"]
-        self._course = event.get("course", "Unknown")
-        self._category = event.get("category", "Others")
+        self._subject = event.get("subject", "Unknown")
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -133,7 +152,6 @@ class _PendingCard(QFrame):
         main = QVBoxLayout(self)
         main.setSpacing(6)
 
-        # --- Filename ---
         filename = self._event.get("filename", "unknown")
         name_label = QLabel(filename)
         name_font = QFont()
@@ -143,15 +161,12 @@ class _PendingCard(QFrame):
         name_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         main.addWidget(name_label)
 
-        # --- Prediction line ---
         conf = self._event.get("overall_confidence", 0.0)
         color = _conf_color_hex(conf)
-        dest_text = f"→  <b>{self._course}</b> / <b>{self._category}</b>"
-        dest_label = QLabel(dest_text)
-        dest_label.setTextFormat(Qt.TextFormat.RichText)
-        main.addWidget(dest_label)
+        subject_label = QLabel(f"->  <b>{self._subject}</b>")
+        subject_label.setTextFormat(Qt.TextFormat.RichText)
+        main.addWidget(subject_label)
 
-        # --- Confidence bar ---
         conf_row = QHBoxLayout()
         conf_bar = QProgressBar()
         conf_bar.setRange(0, 100)
@@ -166,25 +181,30 @@ class _PendingCard(QFrame):
         conf_row.addWidget(QLabel(_conf_label(conf)), stretch=5)
         main.addLayout(conf_row)
 
-        # --- AI reason ---
         reason = self._event.get("reason", "")
         if reason:
-            # Show only the most relevant part (first pipe-separated segment)
-            short_reason = reason.split("|")[1].strip() if "|" in reason else reason
+            short_reason = reason.split("|")[-1].strip()
             reason_label = QLabel(f'<i style="color:#aaa">{short_reason}</i>')
             reason_label.setTextFormat(Qt.TextFormat.RichText)
             reason_label.setWordWrap(True)
             main.addWidget(reason_label)
 
-        # --- Buttons ---
         btn_row = QHBoxLayout()
         accept_btn = QPushButton("Accept")
-        accept_btn.setStyleSheet("QPushButton { background: #27ae60; color: white; border-radius: 4px; padding: 4px 12px; }")
+        accept_btn.setStyleSheet(
+            "QPushButton { background: #27ae60; color: white; border-radius: 4px; padding: 4px 12px; }"
+        )
         change_btn = QPushButton("Change")
-        change_btn.setStyleSheet("QPushButton { background: #2980b9; color: white; border-radius: 4px; padding: 4px 12px; }")
+        change_btn.setStyleSheet(
+            "QPushButton { background: #2980b9; color: white; border-radius: 4px; padding: 4px 12px; }"
+        )
         skip_btn = QPushButton("Skip")
-        skip_btn.setStyleSheet("QPushButton { background: #7f8c8d; color: white; border-radius: 4px; padding: 4px 12px; }")
+        skip_btn.setStyleSheet(
+            "QPushButton { background: #7f8c8d; color: white; border-radius: 4px; padding: 4px 12px; }"
+        )
 
+        valid_subject = bool(self._subject and self._subject != "Unknown")
+        accept_btn.setEnabled(valid_subject)
         accept_btn.clicked.connect(self._on_accept)
         change_btn.clicked.connect(self._on_change)
         skip_btn.clicked.connect(self._on_skip)
@@ -196,20 +216,13 @@ class _PendingCard(QFrame):
         main.addLayout(btn_row)
 
     def _on_accept(self) -> None:
-        self.accepted.emit(self._event_id, self._course, self._category)
+        self.accepted.emit(self._event_id, self._subject)
         self.deleteLater()
 
     def _on_change(self) -> None:
-        dlg = _ChangeDialog(
-            self._course_names,
-            self._course,
-            self._category,
-            parent=self,
-        )
+        dlg = _ChangeDialog(self._subject_names, self._subject, parent=self)
         if dlg.exec() == QDialog.DialogCode.Accepted:
-            new_course = dlg.selected_course()
-            new_cat = dlg.selected_category()
-            self.changed.emit(self._event_id, new_course, new_cat)
+            self.changed.emit(self._event_id, dlg.selected_subject())
             self.deleteLater()
 
     def _on_skip(self) -> None:
@@ -218,17 +231,13 @@ class _PendingCard(QFrame):
 
 
 class PendingWidget(QWidget):
-    """
-    Scrollable list of pending file decision cards.
-    Emits signals with (event_id, final_course, final_category) for accepted/changed,
-    and (event_id,) for skipped.
-    """
+    """Scrollable list of pending file decisions."""
 
-    decision_made = Signal(int, str, str, str)  # event_id, course, category, action
+    decision_made = Signal(int, str, str)  # event_id, subject, action
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._course_names: list[str] = []
+        self._subject_names: list[str] = []
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -242,7 +251,7 @@ class PendingWidget(QWidget):
         title.setFont(font)
         outer.addWidget(title)
 
-        self._empty_label = QLabel("No pending files — everything is sorted!")
+        self._empty_label = QLabel("No pending files -- everything is sorted!")
         self._empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._empty_label.setStyleSheet("color: #888; font-style: italic;")
         outer.addWidget(self._empty_label)
@@ -258,27 +267,24 @@ class PendingWidget(QWidget):
         scroll.setWidget(container)
         outer.addWidget(scroll)
 
-    def set_course_names(self, names: list[str]) -> None:
-        self._course_names = names
+    def set_subject_names(self, names: list[str]) -> None:
+        self._subject_names = names
 
     def add_pending(self, event: dict) -> None:
-        """Add a new pending card to the top of the list."""
         self._empty_label.hide()
-        card = _PendingCard(event, self._course_names, parent=self)
+        card = _PendingCard(event, self._subject_names, parent=self)
         card.accepted.connect(
-            lambda eid, c, cat: self.decision_made.emit(eid, c, cat, "accepted")
+            lambda eid, subject: self.decision_made.emit(eid, subject, "accepted")
         )
         card.changed.connect(
-            lambda eid, c, cat: self.decision_made.emit(eid, c, cat, "corrected")
+            lambda eid, subject: self.decision_made.emit(eid, subject, "corrected")
         )
         card.skipped.connect(
-            lambda eid: self.decision_made.emit(eid, "", "", "skipped")
+            lambda eid: self.decision_made.emit(eid, "", "skipped")
         )
         self._cards_layout.insertWidget(0, card)
 
     def load_pending(self, events: list[dict]) -> None:
-        """Replace all pending cards from a list of event dicts."""
-        # Clear existing cards
         while self._cards_layout.count():
             item = self._cards_layout.takeAt(0)
             if item.widget():
@@ -290,31 +296,28 @@ class PendingWidget(QWidget):
 
         self._empty_label.hide()
         for evt in events:
-            # Adapt DB event dict to the card's expected format
+            conf_values = [
+                value for value in [
+                    evt.get("school_confidence"),
+                    evt.get("course_confidence"),
+                ] if value is not None
+            ]
             card_event = {
                 "event_id": evt["id"],
                 "filename": evt.get("filename", ""),
                 "original_path": evt.get("original_path", ""),
-                "course": evt.get("course_predicted", "Unknown"),
-                "category": evt.get("category_predicted", "Others"),
-                "overall_confidence": min(filter(
-                    lambda x: x is not None,
-                    [
-                        evt.get("school_confidence"),
-                        evt.get("course_confidence"),
-                        evt.get("category_confidence"),
-                    ],
-                ), default=0.0),
+                "subject": evt.get("course_predicted", "Unknown"),
+                "overall_confidence": min(conf_values) if conf_values else 0.0,
                 "reason": evt.get("prediction_reason", ""),
             }
-            card = _PendingCard(card_event, self._course_names, parent=self)
+            card = _PendingCard(card_event, self._subject_names, parent=self)
             card.accepted.connect(
-                lambda eid, c, cat: self.decision_made.emit(eid, c, cat, "accepted")
+                lambda eid, subject: self.decision_made.emit(eid, subject, "accepted")
             )
             card.changed.connect(
-                lambda eid, c, cat: self.decision_made.emit(eid, c, cat, "corrected")
+                lambda eid, subject: self.decision_made.emit(eid, subject, "corrected")
             )
             card.skipped.connect(
-                lambda eid: self.decision_made.emit(eid, "", "", "skipped")
+                lambda eid: self.decision_made.emit(eid, "", "skipped")
             )
             self._cards_layout.addWidget(card)

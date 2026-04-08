@@ -5,7 +5,7 @@ Controls:
   - Downloads folder path picker
   - Dev/test watch folder override (separate from real Downloads)
   - School root folder picker
-  - "Rescan Course Folders" button
+  - "Rescan Subject Folders" button
   - Confidence threshold sliders (HIGH and MEDIUM)
   - Warm-up mode toggle
   - "Refresh Model" button (manual retrain trigger)
@@ -102,7 +102,7 @@ class SettingsWidget(QWidget):
         sr_row.addWidget(self._school_root_btn)
         folder_form.addRow("School root folder:", sr_row)
 
-        self._rescan_btn = QPushButton("Rescan Course Folders")
+        self._rescan_btn = QPushButton("Rescan Subject Folders")
         self._rescan_btn.setStyleSheet("QPushButton { background: #2980b9; color: white; padding: 4px 12px; border-radius: 4px; }")
         self._rescan_status = QLabel("")
         self._rescan_status.setStyleSheet("color: #2ecc71;")
@@ -229,7 +229,7 @@ class SettingsWidget(QWidget):
             self.rescan_requested.emit(path)
 
     def on_rescan_done(self, count: int) -> None:
-        self._rescan_status.setText(f"Found {count} course folder(s)")
+        self._rescan_status.setText(f"Found {count} subject folder(s)")
 
     def _on_retrain(self) -> None:
         self._retrain_status.setText("Retraining in background…")
