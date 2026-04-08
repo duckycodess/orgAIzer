@@ -4,6 +4,10 @@ storage/db.py -- SQLite connection and schema initialization.
 The database lives in %APPDATA%/OrgAIzer/orgaizer.db.
 WAL journal mode is enabled so the UI thread can read while
 the background watcher thread writes without blocking.
+
+Note: the schema still uses legacy `course_*` column names. In the current
+subject-focused app, those columns store subject labels for compatibility with
+older local databases.
 """
 
 import os
@@ -95,7 +99,7 @@ def init_schema(conn: sqlite3.Connection) -> None:
             source          TEXT
         );
 
-        -- Course folders discovered by scanning the School root directory
+        -- Subject folders discovered by scanning the School root directory
         CREATE TABLE IF NOT EXISTS course_folders (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
             course_name  TEXT NOT NULL UNIQUE,

@@ -38,7 +38,7 @@ def main() -> int:
 
     app = QApplication(sys.argv)
     app.setApplicationName("OrgAIzer")
-    app.setApplicationDisplayName("OrgAIzer — AI School File Sorter")
+    app.setApplicationDisplayName("OrgAIzer -- AI School Subject Sorter")
     app.setOrganizationName("CS180")
 
     # Keep the app alive when the last window is closed (tray mode).

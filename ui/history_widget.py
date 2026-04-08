@@ -1,8 +1,7 @@
 """
-ui/history_widget.py -- History tab: table of all file events with undo.
+ui/history_widget.py -- History tab with undo support.
 
-Columns: Time | Filename | Course | Category | Confidence | Action | Undo
-Color coding: green >= HIGH_THRESHOLD, yellow >= MEDIUM_THRESHOLD, red below.
+Columns: Time | Filename | Subject | Confidence | Action | Undo
 """
 
 from __future__ import annotations
@@ -39,22 +38,22 @@ def _conf_color(conf: float | None) -> QColor:
     if conf is None:
         return QColor("#888888")
     if conf >= _CONF_HIGH:
-        return QColor("#2ecc71")   # green
+        return QColor("#2ecc71")
     if conf >= _CONF_MED:
-        return QColor("#f39c12")   # amber
-    return QColor("#e74c3c")       # red
+        return QColor("#f39c12")
+    return QColor("#e74c3c")
 
 
 def _conf_label(conf: float | None) -> str:
     if conf is None:
-        return "—"
+        return "-"
     return f"{conf:.0%}"
 
 
 class HistoryWidget(QWidget):
     """Shows the full event log with undo buttons on moved rows."""
 
-    undo_requested = Signal(int)   # event_id
+    undo_requested = Signal(int)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -64,7 +63,6 @@ class HistoryWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
 
-        # Header row
         header = QHBoxLayout()
         title = QLabel("File History")
         font = QFont()
@@ -78,10 +76,9 @@ class HistoryWidget(QWidget):
         header.addWidget(self._refresh_btn)
         layout.addLayout(header)
 
-        # Table
-        self._table = QTableWidget(0, 7)
+        self._table = QTableWidget(0, 6)
         self._table.setHorizontalHeaderLabels([
-            "Time", "Filename", "Course", "Category", "Confidence", "Action", "Undo"
+            "Time", "Filename", "Subject", "Confidence", "Action", "Undo"
         ])
         self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
@@ -94,19 +91,12 @@ class HistoryWidget(QWidget):
         self._refresh_btn.clicked.connect(self.refresh_requested)
 
     def refresh_requested(self) -> None:
-        """Signal parent to reload events from DB."""
-        self.load_events([])  # caller should call populate_events instead
+        self.populate_events([])
 
     def populate_events(self, events: list[dict]) -> None:
-        """Fill the table with a list of event dicts from FileEventRepo."""
         self._table.setRowCount(0)
         for evt in events:
             self._add_row(evt)
-
-    def prepend_event(self, evt: dict) -> None:
-        """Add a single new event at the top of the table."""
-        self._table.insertRow(0)
-        self._fill_row(0, evt)
 
     def _add_row(self, evt: dict) -> None:
         row = self._table.rowCount()
@@ -115,8 +105,6 @@ class HistoryWidget(QWidget):
 
     def _fill_row(self, row: int, evt: dict) -> None:
         event_id = evt.get("id")
-
-        # Timestamp (shorten to HH:MM:SS date part)
         ts = str(evt.get("timestamp", ""))
         if "T" in ts:
             date, time_ = ts.split("T", 1)
@@ -124,60 +112,53 @@ class HistoryWidget(QWidget):
         else:
             display_ts = ts
 
-        overall_conf = evt.get("school_confidence")
-        if evt.get("course_confidence") is not None:
-            all_confs = [
-                c for c in [
-                    evt.get("school_confidence"),
-                    evt.get("course_confidence"),
-                    evt.get("category_confidence"),
-                ] if c is not None
-            ]
-            if all_confs:
-                overall_conf = min(all_confs)
+        conf_values = [
+            value for value in [
+                evt.get("school_confidence"),
+                evt.get("course_confidence"),
+            ] if value is not None
+        ]
+        overall_conf = min(conf_values) if conf_values else evt.get("school_confidence")
 
-        action = evt.get("user_action") or evt.get("stage") or "—"
+        action = evt.get("user_action") or evt.get("stage") or "-"
         action_label = _ACTION_LABELS.get(action, action)
-
-        course = evt.get("final_course") or evt.get("course_predicted") or "—"
-        category = evt.get("final_category") or evt.get("category_predicted") or "—"
+        subject = evt.get("final_course") or evt.get("course_predicted") or "-"
 
         cells = [
             display_ts,
             evt.get("filename", ""),
-            course,
-            category,
+            subject,
             _conf_label(overall_conf),
             action_label,
         ]
         for col, text in enumerate(cells):
             item = QTableWidgetItem(str(text))
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            if col == 1:  # filename left-aligned
+            if col == 1:
                 item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-            if col == 4:  # confidence — color it
+            if col == 3:
                 item.setForeground(_conf_color(overall_conf))
                 font = QFont()
                 font.setBold(True)
                 item.setFont(font)
             self._table.setItem(row, col, item)
 
-        # Undo button — only for moved events that haven't been undone
         stage = evt.get("stage", "")
         if stage == "moved" and action != "undone":
             btn = QPushButton("Undo")
             btn.setFixedWidth(60)
             btn.setProperty("event_id", event_id)
-            btn.clicked.connect(lambda checked=False, eid=event_id: self.undo_requested.emit(eid))
-            self._table.setCellWidget(row, 6, btn)
+            btn.clicked.connect(
+                lambda checked=False, eid=event_id: self.undo_requested.emit(eid)
+            )
+            self._table.setCellWidget(row, 5, btn)
         else:
-            self._table.setItem(row, 6, QTableWidgetItem(""))
+            self._table.setItem(row, 5, QTableWidgetItem(""))
 
     def mark_undone(self, event_id: int) -> None:
-        """Update a row's action and remove its Undo button after successful undo."""
         for row in range(self._table.rowCount()):
-            btn = self._table.cellWidget(row, 6)
+            btn = self._table.cellWidget(row, 5)
             if btn and btn.property("event_id") == event_id:
-                self._table.setItem(row, 5, QTableWidgetItem("Undone"))
-                self._table.removeCellWidget(row, 6)
+                self._table.setItem(row, 4, QTableWidgetItem("Undone"))
+                self._table.removeCellWidget(row, 5)
                 break

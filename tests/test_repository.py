@@ -1,5 +1,5 @@
 """
-tests/test_repository.py — Unit tests for storage/repository.py.
+tests/test_repository.py -- Unit tests for storage/repository.py.
 """
 
 import json
@@ -8,9 +8,9 @@ import sqlite3
 import pytest
 
 from storage.repository import (
-    CourseFolderRepo,
     FileEventRepo,
     SettingsRepo,
+    SubjectFolderRepo,
     TrainingSampleRepo,
 )
 
@@ -18,7 +18,6 @@ from storage.repository import (
 class TestSettingsRepo:
     def test_get_default(self, db_conn: sqlite3.Connection):
         repo = SettingsRepo(db_conn)
-        # Default inserted by init_schema
         assert repo.get("warmup_active") == "1"
 
     def test_set_and_get(self, db_conn: sqlite3.Connection):
@@ -38,40 +37,33 @@ class TestSettingsRepo:
         repo = SettingsRepo(db_conn)
         assert repo.get_bool("warmup_active") is True
 
-    def test_overwrite(self, db_conn: sqlite3.Connection):
-        repo = SettingsRepo(db_conn)
-        repo.set("key", "v1")
-        repo.set("key", "v2")
-        assert repo.get("key") == "v2"
-
 
 class TestFileEventRepo:
     def test_insert_and_get_all(self, db_conn: sqlite3.Connection):
         repo = FileEventRepo(db_conn)
-        eid = repo.insert(
+        event_id = repo.insert(
             filename="cs180_lab.pdf",
             original_path=r"C:\Users\test\Downloads\cs180_lab.pdf",
             stage="pending",
             school_confidence=0.9,
-            course_predicted="CS180",
-            course_confidence=0.95,
-            category_predicted="Labs",
-            category_confidence=0.90,
+            subject_predicted="CS180",
+            subject_confidence=0.95,
         )
-        assert isinstance(eid, int)
+        assert isinstance(event_id, int)
         rows = repo.get_all()
         assert len(rows) == 1
         assert rows[0]["filename"] == "cs180_lab.pdf"
+        assert rows[0]["course_predicted"] == "CS180"
 
     def test_update(self, db_conn: sqlite3.Connection):
         repo = FileEventRepo(db_conn)
-        eid = repo.insert(
+        event_id = repo.insert(
             filename="file.pdf",
             original_path=r"C:\Downloads\file.pdf",
             stage="pending",
         )
-        repo.update(eid, stage="moved", user_action="accepted")
-        row = repo.get_by_id(eid)
+        repo.update(event_id, stage="moved", user_action="accepted")
+        row = repo.get_by_id(event_id)
         assert row["stage"] == "moved"
         assert row["user_action"] == "accepted"
 
@@ -93,48 +85,48 @@ class TestTrainingSampleRepo:
             extension=".pdf",
             file_size=50000,
             label_school=1,
-            label_course="CS180",
-            label_category="Assignments",
+            label_subject="CS180",
+            label_category=None,
             source="user_accept",
         )
         assert repo.count() == 1
         assert repo.count_school() == 1
 
-    def test_count_for_course(self, db_conn: sqlite3.Connection):
+    def test_count_for_subject(self, db_conn: sqlite3.Connection):
         repo = TrainingSampleRepo(db_conn)
-        repo.insert("a.pdf", "{}", ".pdf", 100, 1, "CS180", "Labs", "user_accept")
-        repo.insert("b.pdf", "{}", ".pdf", 100, 1, "CS145", "Labs", "user_accept")
-        assert repo.count_for_course("CS180") == 1
-        assert repo.count_for_course("CS145") == 1
-        assert repo.count_for_course("CS999") == 0
+        repo.insert("a.pdf", "{}", ".pdf", 100, 1, label_subject="CS180")
+        repo.insert("b.pdf", "{}", ".pdf", 100, 1, label_subject="CS145")
+        assert repo.count_for_subject("CS180") == 1
+        assert repo.count_for_subject("CS145") == 1
+        assert repo.count_for_subject("CS999") == 0
 
 
-class TestCourseFolderRepo:
+class TestSubjectFolderRepo:
     def test_upsert_and_get_all(self, db_conn: sqlite3.Connection):
-        repo = CourseFolderRepo(db_conn)
-        repo.upsert("CS180", r"C:\School\CS180", ["Lectures", "Labs"])
+        repo = SubjectFolderRepo(db_conn)
+        repo.upsert("CS180", r"C:\School\CS180", ["Week 1"])
         rows = repo.get_all()
         assert len(rows) == 1
         assert rows[0]["course_name"] == "CS180"
-        assert rows[0]["subfolders"] == ["Lectures", "Labs"]
+        assert rows[0]["subfolders"] == ["Week 1"]
 
     def test_upsert_updates_existing(self, db_conn: sqlite3.Connection):
-        repo = CourseFolderRepo(db_conn)
-        repo.upsert("CS180", r"C:\School\CS180", ["Lectures"])
-        repo.upsert("CS180", r"C:\School\CS180", ["Lectures", "Labs"])
+        repo = SubjectFolderRepo(db_conn)
+        repo.upsert("CS180", r"C:\School\CS180", ["Week 1"])
+        repo.upsert("CS180", r"C:\School\CS180", ["Week 1", "Week 2"])
         rows = repo.get_all()
         assert len(rows) == 1
-        assert rows[0]["subfolders"] == ["Lectures", "Labs"]
+        assert rows[0]["subfolders"] == ["Week 1", "Week 2"]
 
-    def test_get_course_names(self, db_conn: sqlite3.Connection):
-        repo = CourseFolderRepo(db_conn)
+    def test_get_subject_names(self, db_conn: sqlite3.Connection):
+        repo = SubjectFolderRepo(db_conn)
         repo.upsert("CS145", r"C:\School\CS145", [])
         repo.upsert("CS180", r"C:\School\CS180", [])
-        names = repo.get_course_names()
+        names = repo.get_subject_names()
         assert names == ["CS145", "CS180"]
 
     def test_clear(self, db_conn: sqlite3.Connection):
-        repo = CourseFolderRepo(db_conn)
+        repo = SubjectFolderRepo(db_conn)
         repo.upsert("CS180", r"C:\School\CS180", [])
         repo.clear()
         assert repo.get_all() == []

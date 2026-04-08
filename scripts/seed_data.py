@@ -1,68 +1,36 @@
 """
 scripts/seed_data.py -- Bootstrap training data from the user's School folder.
 
-Walks the School root directory and treats the existing folder structure as
-labeled ground truth:
-  School/CS180/Labs/cs180_lab1.pdf  ->  school=1, course=CS180, category=Labs
+The refocused app treats each top-level folder in the School root as a subject:
+  School/CS180/quiz1.pdf               -> subject=CS180
+  School/Discrete Math/week2/notes.pdf -> subject=Discrete Math
 
-This is the cold-start solution. Run once before the first demo to give
-the ML models enough examples to produce meaningful probabilities.
-
-Usage:
-    python scripts/seed_data.py [--school-root PATH] [--db PATH] [--dry-run]
-
-Output:
-    Prints a summary of inserted samples and a sanity-check of the first 10.
+Nested folders are still useful during seeding because their names are added to
+the text features, but the label is always the top-level subject folder.
 """
 
 import argparse
 import json
-import os
-import re
 import sys
+from collections import Counter
 from pathlib import Path
 
-# Ensure the project root is on sys.path when running as a script.
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from storage.db import get_connection, get_db_path, init_schema
-from storage.repository import TrainingSampleRepo
-from app.settings import CATEGORY_LABELS
+from storage.repository import SettingsRepo, TrainingSampleRepo
 
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt", ".pptx", ".zip"}
 
-# Category folder names we recognize (case-insensitive partial match).
-CATEGORY_ALIASES: dict[str, str] = {
-    "lecture": "Lectures",
-    "lectures": "Lectures",
-    "lab": "Labs",
-    "labs": "Labs",
-    "exercise": "Exercises",
-    "exercises": "Exercises",
-    "assignment": "Assignments",
-    "assignments": "Assignments",
-    "homework": "Assignments",
-    "hw": "Assignments",
-    "reference": "References",
-    "references": "References",
-    "reading": "References",
-    "others": "Others",
-    "misc": "Others",
-    "miscellaneous": "Others",
-}
 
-
-def normalize_category(folder_name: str) -> str:
-    """Map a folder name to one of the fixed category labels."""
-    key = folder_name.strip().lower()
-    return CATEGORY_ALIASES.get(key, "Others")
+def _build_text_tokens(subject_name: str, file_path: Path, subject_root: Path) -> str:
+    relative_parent = file_path.parent.relative_to(subject_root)
+    parent_tokens = " ".join(relative_parent.parts)
+    stem_tokens = file_path.stem.replace("_", " ").replace("-", " ")
+    return " ".join(token for token in [stem_tokens, parent_tokens, subject_name] if token)
 
 
 def seed(school_root: str, conn, dry_run: bool = False) -> int:
-    """
-    Walk school_root and insert one training sample per supported file.
-    Returns the number of samples inserted.
-    """
     repo = TrainingSampleRepo(conn)
     root = Path(school_root)
     if not root.exists():
@@ -73,52 +41,44 @@ def seed(school_root: str, conn, dry_run: bool = False) -> int:
     skipped = 0
     samples_preview: list[dict] = []
 
-    # Walk: School/<COURSE>/<CATEGORY>/<file>
-    for course_dir in sorted(root.iterdir()):
-        if not course_dir.is_dir():
+    for subject_dir in sorted(root.iterdir()):
+        if not subject_dir.is_dir():
             continue
-        course_name = course_dir.name  # e.g. "CS180"
+        subject_name = subject_dir.name
 
-        for cat_dir in sorted(course_dir.iterdir()):
-            if not cat_dir.is_dir():
+        for file_path in sorted(subject_dir.rglob("*")):
+            if not file_path.is_file():
                 continue
-            category = normalize_category(cat_dir.name)  # e.g. "Labs"
+            if file_path.suffix.lower() not in SUPPORTED_EXTENSIONS:
+                skipped += 1
+                continue
 
-            for file_path in sorted(cat_dir.iterdir()):
-                if file_path.suffix.lower() not in SUPPORTED_EXTENSIONS:
-                    skipped += 1
-                    continue
+            text_tokens = _build_text_tokens(subject_name, file_path, subject_dir)
+            sample = {
+                "filename": file_path.name,
+                "text_features": json.dumps(text_tokens),
+                "extension": file_path.suffix.lower(),
+                "file_size": 0,
+                "label_school": 1,
+                "label_subject": subject_name,
+                "source": "bootstrap",
+            }
 
-                stem = file_path.stem
-                text_tokens = stem.replace("_", " ").replace("-", " ") + " " + cat_dir.name + " " + course_name
+            if not dry_run:
+                repo.insert(
+                    filename=sample["filename"],
+                    text_features=sample["text_features"],
+                    extension=sample["extension"],
+                    file_size=sample["file_size"],
+                    label_school=1,
+                    label_subject=subject_name,
+                    label_category=None,
+                    source="bootstrap",
+                )
 
-                sample = {
-                    "filename": file_path.name,
-                    "text_features": json.dumps(text_tokens),
-                    "extension": file_path.suffix.lower(),
-                    "file_size": 0,  # don't stat files for speed
-                    "label_school": 1,
-                    "label_course": course_name,
-                    "label_category": category,
-                    "source": "bootstrap",
-                }
+            samples_preview.append(sample)
+            inserted += 1
 
-                if not dry_run:
-                    repo.insert(
-                        filename=sample["filename"],
-                        text_features=sample["text_features"],
-                        extension=sample["extension"],
-                        file_size=sample["file_size"],
-                        label_school=1,
-                        label_course=course_name,
-                        label_category=category,
-                        source="bootstrap",
-                    )
-
-                samples_preview.append(sample)
-                inserted += 1
-
-    # Print sanity check
     print(f"\n{'[DRY RUN] ' if dry_run else ''}Seed complete.")
     print(f"  Inserted: {inserted} samples")
     print(f"  Skipped (unsupported ext): {skipped}")
@@ -126,21 +86,15 @@ def seed(school_root: str, conn, dry_run: bool = False) -> int:
 
     if samples_preview:
         print("First 10 samples (sanity check):")
-        print(f"{'Filename':<40} {'Course':<12} {'Category'}")
-        print("-" * 75)
-        for s in samples_preview[:10]:
-            print(f"{s['filename']:<40} {s['label_course']:<12} {s['label_category']}")
+        print(f"{'Filename':<40} {'Subject'}")
+        print("-" * 60)
+        for sample in samples_preview[:10]:
+            print(f"{sample['filename']:<40} {sample['label_subject']}")
 
-    # Per-course and per-category summary
-    from collections import Counter
-    course_counts = Counter(s["label_course"] for s in samples_preview)
-    cat_counts = Counter(s["label_category"] for s in samples_preview)
-    print("\nPer-course counts:")
-    for c, n in sorted(course_counts.items()):
-        print(f"  {c}: {n}")
-    print("\nPer-category counts:")
-    for c, n in sorted(cat_counts.items()):
-        print(f"  {c}: {n}")
+    subject_counts = Counter(sample["label_subject"] for sample in samples_preview)
+    print("\nPer-subject counts:")
+    for subject, count in sorted(subject_counts.items()):
+        print(f"  {subject}: {count}")
 
     return inserted
 
@@ -168,12 +122,7 @@ def main() -> None:
     conn = get_connection(db_path)
     init_schema(conn)
 
-    from storage.repository import SettingsRepo
-    school_root = args.school_root
-    if not school_root:
-        repo = SettingsRepo(conn)
-        school_root = repo.get("school_root", "")
-
+    school_root = args.school_root or SettingsRepo(conn).get("school_root", "")
     if not school_root:
         print("ERROR: No school root configured. Pass --school-root or set it in the app first.")
         sys.exit(1)

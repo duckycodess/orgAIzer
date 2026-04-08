@@ -1,8 +1,9 @@
 """
-storage/repository.py — CRUD operations for all database tables.
+storage/repository.py -- CRUD operations for all database tables.
 
-Each repository class takes a sqlite3.Connection so it can participate
-in transactions without owning the connection lifecycle.
+The current product language is "subject" rather than "course/category".
+To avoid breaking existing local databases, the SQLite schema still stores
+subject labels in the legacy `course_*` columns.
 """
 
 import json
@@ -68,19 +69,31 @@ class FileEventRepo:
         stage: str,
         destination_path: str | None = None,
         school_confidence: float | None = None,
+        subject_predicted: str | None = None,
+        subject_confidence: float | None = None,
+        final_subject: str | None = None,
+        prediction_reason: str | None = None,
+        user_action: str | None = None,
+        notes: str | None = None,
+        feature_text: str | None = None,   # extracted document text for retraining
+        file_size: int | None = None,      # bytes at time of detection
         course_predicted: str | None = None,
         course_confidence: float | None = None,
         category_predicted: str | None = None,
         category_confidence: float | None = None,
-        prediction_reason: str | None = None,
-        user_action: str | None = None,
         final_course: str | None = None,
         final_category: str | None = None,
-        notes: str | None = None,
-        feature_text: str | None = None,   # extracted document text for retraining
-        file_size: int | None = None,       # bytes at time of detection
     ) -> int:
         """Insert a new event and return its id."""
+        legacy_course_predicted = (
+            subject_predicted if subject_predicted is not None else course_predicted
+        )
+        legacy_course_confidence = (
+            subject_confidence if subject_confidence is not None else course_confidence
+        )
+        legacy_final_course = (
+            final_subject if final_subject is not None else final_course
+        )
         cursor = self._conn.execute(
             """
             INSERT INTO file_events (
@@ -94,9 +107,9 @@ class FileEventRepo:
             (
                 datetime.now().isoformat(timespec="seconds"),
                 filename, original_path, destination_path,
-                stage, school_confidence, course_predicted, course_confidence,
+                stage, school_confidence, legacy_course_predicted, legacy_course_confidence,
                 category_predicted, category_confidence, prediction_reason,
-                user_action, final_course, final_category, notes,
+                user_action, legacy_final_course, final_category, notes,
                 feature_text, file_size,
             ),
         )
@@ -152,10 +165,12 @@ class TrainingSampleRepo:
         extension: str,
         file_size: int,
         label_school: int,    # 0 or 1
-        label_course: str | None,
-        label_category: str | None,
-        source: str,          # 'user_correction', 'user_accept', 'bootstrap'
+        label_course: str | None = None,
+        label_category: str | None = None,
+        source: str = "user_accept",
+        label_subject: str | None = None,
     ) -> int:
+        legacy_label_course = label_subject if label_subject is not None else label_course
         cursor = self._conn.execute(
             """
             INSERT INTO training_samples (
@@ -166,7 +181,7 @@ class TrainingSampleRepo:
             (
                 datetime.now().isoformat(timespec="seconds"),
                 filename, text_features, extension,
-                file_size, label_school, label_course, label_category, source,
+                file_size, label_school, legacy_label_course, label_category, source,
             ),
         )
         self._conn.commit()
@@ -189,27 +204,39 @@ class TrainingSampleRepo:
             "SELECT COUNT(*) FROM training_samples WHERE label_school = 1"
         ).fetchone()[0]
 
-    def count_for_course(self, course: str) -> int:
-        """Count school samples for a specific course."""
+    def count_for_subject(self, subject: str) -> int:
+        """Count school samples for a specific subject."""
         return self._conn.execute(
             "SELECT COUNT(*) FROM training_samples"
             " WHERE label_school = 1 AND label_course = ?",
-            (course,),
+            (subject,),
         ).fetchone()[0]
 
+    def count_for_course(self, course: str) -> int:
+        return self.count_for_subject(course)
+
 
 # ---------------------------------------------------------------------------
-# CourseFolderRepo
+# SubjectFolderRepo
 # ---------------------------------------------------------------------------
 
-class CourseFolderRepo:
-    """Manage discovered course folders from the School root directory."""
+class SubjectFolderRepo:
+    """
+    Manage discovered subject folders from the School root directory.
+
+    The table name remains `course_folders` for backwards compatibility.
+    """
 
     def __init__(self, conn: sqlite3.Connection) -> None:
         self._conn = conn
 
-    def upsert(self, course_name: str, folder_path: str, subfolders: list[str]) -> None:
-        """Insert or replace a course folder record."""
+    def upsert(
+        self,
+        subject_name: str,
+        folder_path: str,
+        subfolders: list[str] | None = None,
+    ) -> None:
+        """Insert or replace a subject folder record."""
         self._conn.execute(
             """
             INSERT INTO course_folders (course_name, folder_path, subfolders)
@@ -218,7 +245,7 @@ class CourseFolderRepo:
                 folder_path = excluded.folder_path,
                 subfolders  = excluded.subfolders
             """,
-            (course_name, folder_path, json.dumps(subfolders)),
+            (subject_name, folder_path, json.dumps(subfolders or [])),
         )
         self._conn.commit()
 
@@ -233,7 +260,7 @@ class CourseFolderRepo:
             result.append(d)
         return result
 
-    def get_course_names(self) -> list[str]:
+    def get_subject_names(self) -> list[str]:
         rows = self._conn.execute(
             "SELECT course_name FROM course_folders ORDER BY course_name ASC"
         ).fetchall()
@@ -242,3 +269,9 @@ class CourseFolderRepo:
     def clear(self) -> None:
         self._conn.execute("DELETE FROM course_folders")
         self._conn.commit()
+
+    def get_course_names(self) -> list[str]:
+        return self.get_subject_names()
+
+
+CourseFolderRepo = SubjectFolderRepo
