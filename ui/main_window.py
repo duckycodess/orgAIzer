@@ -53,7 +53,9 @@ class MainWindow(QMainWindow):
         self._refresh_history()
         self._refresh_pending()
         self._update_status_bar()
-        self._pending.set_subject_names(self._controller.get_subject_names())
+        subject_names = self._controller.get_subject_names()
+        self._pending.set_subject_names(subject_names)
+        self._history.set_subject_names(subject_names)
 
         self._controller.start_watching()
 
@@ -108,6 +110,7 @@ class MainWindow(QMainWindow):
 
         self._pending.decision_made.connect(self._on_decision_made)
         self._history.undo_requested.connect(self._on_undo_requested)
+        self._history.mark_as_school_requested.connect(self._on_mark_as_school)
         self._settings_widget.settings_changed.connect(self._on_settings_changed)
         self._settings_widget.rescan_requested.connect(self._on_rescan_requested)
         self._settings_widget.retrain_requested.connect(self._on_retrain_requested)
@@ -149,7 +152,9 @@ class MainWindow(QMainWindow):
                 "The file could not be moved. Check that the School root is set and the subject name is valid.",
             )
         self._refresh_history()
-        self._pending.set_subject_names(self._controller.get_subject_names())
+        subject_names = self._controller.get_subject_names()
+        self._pending.set_subject_names(subject_names)
+        self._history.set_subject_names(subject_names)
         self._refresh_pending()
         self._update_status_bar()
         self._settings_widget.update_warmup_display()
@@ -172,6 +177,21 @@ class MainWindow(QMainWindow):
             "Could not undo: the file may have been moved or deleted already.",
         )
 
+    def _on_mark_as_school(self, event_id: int, subject: str) -> None:
+        dest_path = self._controller.handle_mark_as_school(event_id, subject)
+        if dest_path is None:
+            QMessageBox.information(
+                self,
+                "Marked as School",
+                "Training sample recorded. File could not be moved (missing or no School root set).",
+            )
+        self._refresh_history()
+        subject_names = self._controller.get_subject_names()
+        self._pending.set_subject_names(subject_names)
+        self._history.set_subject_names(subject_names)
+        self._update_status_bar()
+        self._settings_widget.update_warmup_display()
+
     def _on_settings_changed(self) -> None:
         self._controller.save_settings()
         self._controller.stop_watching()
@@ -181,7 +201,9 @@ class MainWindow(QMainWindow):
     def _on_rescan_requested(self, school_root: str) -> None:
         count = self._controller.scan_subject_folders(school_root)
         self._settings_widget.on_rescan_done(count)
-        self._pending.set_subject_names(self._controller.get_subject_names())
+        subject_names = self._controller.get_subject_names()
+        self._pending.set_subject_names(subject_names)
+        self._history.set_subject_names(subject_names)
         self._refresh_pending()
 
     def _on_retrain_requested(self) -> None:
