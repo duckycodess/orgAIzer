@@ -9,6 +9,10 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -23,6 +27,7 @@ _ACTION_LABELS = {
     "auto": "Auto-moved",
     "accepted": "Accepted",
     "corrected": "Corrected",
+    "corrected_not_school": "Corrected (was Not School)",
     "skipped": "Skipped",
     "undone": "Undone",
     "not_school": "Not school",
@@ -50,13 +55,78 @@ def _conf_label(conf: float | None) -> str:
     return f"{conf:.0%}"
 
 
+def _normalize_subject_input(subject: str) -> str:
+    return " ".join(subject.strip().split())
+
+
+def _is_valid_subject_input(subject: str) -> bool:
+    if not subject:
+        return False
+    if subject in (".", ".."):
+        return False
+    if "/" in subject or "\\" in subject:
+        return False
+    return True
+
+
+class _SubjectPickerDialog(QDialog):
+    """Dialog to pick or type a subject name."""
+
+    def __init__(self, subject_names: list[str], parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Choose Subject")
+        self.setModal(True)
+        self.setMinimumWidth(400)
+
+        layout = QFormLayout(self)
+        self._combo = QComboBox()
+        self._combo.setEditable(True)
+        self._combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self._combo.addItems(sorted(subject_names))
+        self._combo.setEditText("")
+        self._combo.lineEdit().setPlaceholderText("Choose an existing subject or type a new one")
+
+        layout.addRow("Subject:", self._combo)
+
+        hint = QLabel("New subject names are allowed.")
+        hint.setStyleSheet("color: #666; font-size: 11px;")
+        layout.addRow("", hint)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addRow(buttons)
+
+        self._update_ok_state()
+        self._combo.lineEdit().textChanged.connect(self._update_ok_state)
+
+    def _update_ok_state(self) -> None:
+        text = self._combo.lineEdit().text()
+        normalized = _normalize_subject_input(text)
+        ok_btn = self.findChild(QPushButton)
+        if ok_btn is None:
+            for btn in self.findChildren(QPushButton):
+                if btn.text() == "OK":
+                    ok_btn = btn
+                    break
+        if ok_btn:
+            ok_btn.setEnabled(_is_valid_subject_input(normalized))
+
+    def selected_subject(self) -> str:
+        return _normalize_subject_input(self._combo.lineEdit().text())
+
+
 class HistoryWidget(QWidget):
     """Shows the full event log with undo buttons on moved rows."""
 
     undo_requested = Signal(int)
+    mark_as_school_requested = Signal(int, str)  # (event_id, subject)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._subject_names: list[str] = []
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -78,7 +148,7 @@ class HistoryWidget(QWidget):
 
         self._table = QTableWidget(0, 6)
         self._table.setHorizontalHeaderLabels([
-            "Time", "Filename", "Subject", "Confidence", "Action", "Undo"
+            "Time", "Filename", "Subject", "Confidence", "Action", "Actions"
         ])
         self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
@@ -92,6 +162,9 @@ class HistoryWidget(QWidget):
 
     def refresh_requested(self) -> None:
         self.populate_events([])
+
+    def set_subject_names(self, names: list[str]) -> None:
+        self._subject_names = list(names)
 
     def populate_events(self, events: list[dict]) -> None:
         self._table.setRowCount(0)
@@ -152,6 +225,14 @@ class HistoryWidget(QWidget):
                 lambda checked=False, eid=event_id: self.undo_requested.emit(eid)
             )
             self._table.setCellWidget(row, 5, btn)
+        elif stage == "not_school" and evt.get("user_action") is None:
+            btn = QPushButton("Mark as School")
+            btn.setFixedWidth(110)
+            btn.setProperty("event_id", event_id)
+            btn.clicked.connect(
+                lambda checked=False, eid=event_id: self._on_mark_as_school_clicked(eid)
+            )
+            self._table.setCellWidget(row, 5, btn)
         else:
             self._table.setItem(row, 5, QTableWidgetItem(""))
 
@@ -162,3 +243,8 @@ class HistoryWidget(QWidget):
                 self._table.setItem(row, 4, QTableWidgetItem("Undone"))
                 self._table.removeCellWidget(row, 5)
                 break
+
+    def _on_mark_as_school_clicked(self, event_id: int) -> None:
+        dlg = _SubjectPickerDialog(self._subject_names, parent=self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self.mark_as_school_requested.emit(event_id, dlg.selected_subject())

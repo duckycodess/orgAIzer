@@ -255,6 +255,93 @@ class Controller(QObject):
 
         return dest_path
 
+    def handle_mark_as_school(
+        self,
+        event_id: int,
+        subject: str,
+    ) -> str | None:
+        """Correct a not_school false negative. Returns dest_path or None."""
+        event = self._event_repo.get_by_id(event_id)
+        if not event:
+            return None
+        if event.get("stage") != "not_school":
+            logger.warning("Event %d is not a not_school event; ignoring", event_id)
+            return None
+
+        normalized = _normalize_subject_name(subject)
+        if not normalized or not _is_valid_subject_name(normalized):
+            logger.warning("Invalid subject name for mark_as_school: %s", subject)
+            return None
+
+        canonical = self._canonical_subject_name(normalized)
+        school_root = self._settings.school_root
+        dest_path = None
+
+        if school_root:
+            dest_dir = Path(school_root) / canonical
+            try:
+                dest_dir.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                logger.warning("Could not create subject folder %s: %s", dest_dir, exc)
+
+            try:
+                dest_path = safe_move(event["original_path"], str(dest_dir))
+                self._event_repo.update(
+                    event_id,
+                    destination_path=dest_path,
+                    stage="moved",
+                    user_action="corrected_not_school",
+                    final_course=canonical,
+                )
+            except FileNotFoundError:
+                self._event_repo.update(
+                    event_id,
+                    stage="skipped",
+                    user_action="corrected_not_school",
+                    final_course=canonical,
+                    notes="File not found; training sample created from stored features",
+                )
+            except OSError as exc:
+                logger.error("Move failed for event %d: %s", event_id, exc)
+                self._event_repo.update(
+                    event_id,
+                    stage="skipped",
+                    user_action="corrected_not_school",
+                    final_course=canonical,
+                    notes=str(exc),
+                )
+
+            self._register_subject_folder(canonical)
+        else:
+            self._event_repo.update(
+                event_id,
+                stage="skipped",
+                user_action="corrected_not_school",
+                final_course=canonical,
+                notes="No school root set; training sample created from stored features",
+            )
+
+        stored_text = event.get("feature_text") or ""
+        stored_size = event.get("file_size") or 0
+        self._sample_repo.insert(
+            filename=event["filename"],
+            text_features=json.dumps(stored_text),
+            extension=Path(event["filename"]).suffix.lower(),
+            file_size=stored_size,
+            label_school=1,
+            label_subject=canonical,
+            source="user_mark_school",
+        )
+
+        self._settings.warmup_labeled_count += 1
+        self._check_warmup_exit(canonical)
+        self._settings.correction_counter += 1
+        self._settings.save(self._settings_repo)
+        if self._settings.correction_counter % RETRAIN_EVERY_N == 0:
+            self.trigger_retrain()
+
+        return dest_path
+
     def undo_move(self, event_id: int) -> bool:
         event = self._event_repo.get_by_id(event_id)
         if not event:
