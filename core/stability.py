@@ -71,6 +71,44 @@ def wait_until_stable(
     return False  # timed out
 
 
+def wait_until_stable_dir(
+    path: str,
+    poll_interval: float = _POLL_INTERVAL_S,
+    stable_rounds: int = _STABLE_ROUNDS,
+    timeout: float = _TIMEOUT_S,
+) -> bool:
+    """
+    Block until the total byte size of all files inside a directory is stable.
+    Returns True if stable within timeout, False if the dir disappeared or timed out.
+    """
+    p = Path(path)
+    deadline = time.monotonic() + timeout
+    last_size = -1
+    stable_count = 0
+
+    while time.monotonic() < deadline:
+        if not p.exists() or not p.is_dir():
+            return False
+        try:
+            current_size = sum(f.stat().st_size for f in p.rglob("*") if f.is_file())
+        except OSError:
+            time.sleep(poll_interval)
+            continue
+
+        if current_size == last_size:
+            stable_count += 1
+        else:
+            stable_count = 0
+            last_size = current_size
+
+        if stable_count >= stable_rounds:
+            return True
+
+        time.sleep(poll_interval)
+
+    return False
+
+
 def _can_open(path: str) -> bool:
     """Try to open the file in binary read mode. Returns False if locked."""
     try:

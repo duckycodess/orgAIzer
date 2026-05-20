@@ -2,11 +2,12 @@
 tests/test_classifiers.py -- Unit tests for the school detector and subject predictor.
 """
 
+from pathlib import Path
 from typing import List
 
 from classifiers.school_detector import SchoolDetector
 from classifiers.subject_predictor import SubjectPredictor
-from core.extractor import FileFeatures
+from core.extractor import FileFeatures, extract_folder_features
 
 
 def make_features(
@@ -98,3 +99,60 @@ class TestSubjectPredictor:
         subject, conf, _ = pred.predict(features)
         assert subject == "Unknown"
         assert conf == 0.0
+
+
+class TestFolderFeatureExtraction:
+    def test_folder_name_used_as_stem(self, tmp_path: Path):
+        folder = tmp_path / "speech_project"
+        folder.mkdir()
+        features = extract_folder_features(str(folder))
+        assert features.filename == "speech_project"
+        assert features.stem == "speech_project"
+        assert features.ext == ""
+
+    def test_contained_filenames_in_members(self, tmp_path: Path):
+        folder = tmp_path / "sts_project"
+        folder.mkdir()
+        (folder / "sts_notes.txt").write_text("science technology society")
+        (folder / "reaction_paper.docx").write_bytes(b"")
+
+        features = extract_folder_features(str(folder))
+        assert "sts_notes.txt" in features.zip_members
+        assert "reaction_paper.docx" in features.zip_members
+
+    def test_text_extracted_from_txt_files(self, tmp_path: Path):
+        folder = tmp_path / "arts_folder"
+        folder.mkdir()
+        (folder / "arts_notes.txt").write_text("art history color theory portfolio")
+
+        features = extract_folder_features(str(folder))
+        assert "art history" in features.text
+
+    def test_all_text_includes_folder_name_and_members(self, tmp_path: Path):
+        folder = tmp_path / "speech_hw"
+        folder.mkdir()
+        (folder / "debate_script.txt").write_text("oral communication delivery")
+
+        features = extract_folder_features(str(folder))
+        all_text = features.all_text.lower()
+        assert "speech" in all_text           # from folder stem
+        assert "debate script" in all_text    # from zip_members via all_text
+
+    def test_empty_folder_does_not_crash(self, tmp_path: Path):
+        folder = tmp_path / "empty"
+        folder.mkdir()
+        features = extract_folder_features(str(folder))
+        assert features.filename == "empty"
+        assert features.size_bytes == 0
+        assert features.zip_members == []
+
+    def test_folder_classified_by_subject_predictor(self, tmp_path: Path):
+        folder = tmp_path / "STS_module3"
+        folder.mkdir()
+        (folder / "reading.txt").write_text("science technology society ethics")
+
+        pred = SubjectPredictor()
+        pred.set_known_subjects(["Speech", "STS", "Arts"])
+        features = extract_folder_features(str(folder))
+        subject, conf, _ = pred.predict(features)
+        assert subject == "STS"

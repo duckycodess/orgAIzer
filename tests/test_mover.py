@@ -91,3 +91,29 @@ class TestUndoMove:
         original.write_text("already here")   # original slot is taken
 
         assert not undo_move(str(dest), str(original))
+
+
+class TestFolderMove:
+    def test_move_folder(self, tmp_dir: Path):
+        src = tmp_dir / "src" / "speech_project"
+        src.mkdir(parents=True)
+        (src / "notes.txt").write_text("speech content")
+
+        result = safe_move(str(src), str(tmp_dir / "dst"))
+
+        assert Path(result).is_dir()
+        assert (Path(result) / "notes.txt").exists()
+        assert not src.exists()
+
+    def test_folder_duplicate_resolution(self, tmp_dir: Path):
+        src_a = tmp_dir / "src1" / "project"
+        src_b = tmp_dir / "src2" / "project"
+        src_a.mkdir(parents=True)
+        src_b.mkdir(parents=True)
+
+        dst = tmp_dir / "dst"
+        safe_move(str(src_a), str(dst))
+        result = safe_move(str(src_b), str(dst))
+
+        assert Path(result).name == "project_1"
+        assert Path(result).is_dir()

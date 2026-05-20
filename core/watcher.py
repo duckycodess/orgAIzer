@@ -21,6 +21,8 @@ from watchdog.events import (  # type: ignore
     FileSystemEventHandler,
     FileCreatedEvent,
     FileMovedEvent,
+    DirCreatedEvent,
+    DirMovedEvent,
 )
 
 from core.stability import is_transient
@@ -40,6 +42,8 @@ class _DownloadsHandler(FileSystemEventHandler):
 
     def on_created(self, event: FileCreatedEvent) -> None:
         if event.is_directory:
+            logger.info("Folder created: %s", event.src_path)
+            self._dispatch(event.src_path)
             return
         path = event.src_path
         # Skip transient extensions -- the on_moved event will catch the final file.
@@ -51,6 +55,8 @@ class _DownloadsHandler(FileSystemEventHandler):
 
     def on_moved(self, event: FileMovedEvent) -> None:
         if event.is_directory:
+            logger.info("Folder renamed/moved to: %s", event.dest_path)
+            self._dispatch(event.dest_path)
             return
         dest = event.dest_path
         # Only care about moves INTO (or within) the watch folder.
