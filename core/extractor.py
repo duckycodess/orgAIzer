@@ -85,6 +85,48 @@ def extract_features(path: str) -> FileFeatures:
     )
 
 
+def extract_folder_features(path: str) -> FileFeatures:
+    """
+    Extract features from a directory.
+    Uses folder name + contained filenames (as zip_members) + limited text
+    from the first few supported files found inside.
+    Never raises.
+    """
+    p = Path(path)
+    total_size = 0
+    member_names: list[str] = []
+    text_parts: list[str] = []
+
+    try:
+        for f in sorted(p.rglob("*")):
+            if not f.is_file():
+                continue
+            try:
+                total_size += f.stat().st_size
+            except OSError:
+                pass
+            member_names.append(f.name)
+            if len(text_parts) < 3 and f.suffix.lower() in {".pdf", ".docx", ".txt", ".pptx"}:
+                try:
+                    snippet = extract_features(str(f)).text
+                    if snippet:
+                        text_parts.append(snippet[:500])
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    return FileFeatures(
+        path=str(p),
+        filename=p.name,
+        stem=p.name,
+        ext="",
+        size_bytes=total_size,
+        text=" ".join(text_parts)[:TEXT_CAP],
+        zip_members=member_names[:50],
+    )
+
+
 # ---------------------------------------------------------------------------
 # Per-format helpers
 # ---------------------------------------------------------------------------

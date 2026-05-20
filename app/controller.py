@@ -24,9 +24,9 @@ from app.settings import (
 )
 from classifiers.school_detector import SchoolDetector
 from classifiers.subject_predictor import SubjectPredictor
-from core.extractor import FileFeatures, extract_features
+from core.extractor import FileFeatures, extract_features, extract_folder_features
 from core.mover import safe_move, undo_move
-from core.stability import wait_until_stable
+from core.stability import wait_until_stable, wait_until_stable_dir
 from core.watcher import FileWatcher
 from storage.db import get_connection, get_models_dir, init_schema
 from storage.repository import (
@@ -382,14 +382,23 @@ class Controller(QObject):
 
         emitted = False
         try:
-            logger.info("Processing file: %s", path)
-            if not wait_until_stable(path):
-                logger.warning("Stability timeout: %s", path)
-                return
-            if not Path(path).exists():
-                return
-
-            features = extract_features(path)
+            p = Path(path)
+            if p.is_dir():
+                logger.info("Processing folder: %s", path)
+                if not wait_until_stable_dir(path):
+                    logger.warning("Folder stability timeout: %s", path)
+                    return
+                if not p.exists():
+                    return
+                features = extract_folder_features(path)
+            else:
+                logger.info("Processing file: %s", path)
+                if not wait_until_stable(path):
+                    logger.warning("Stability timeout: %s", path)
+                    return
+                if not p.exists():
+                    return
+                features = extract_features(path)
             self._features_ready.emit({
                 "path": features.path,
                 "filename": features.filename,
