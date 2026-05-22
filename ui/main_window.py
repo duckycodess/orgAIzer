@@ -20,17 +20,19 @@ from PySide6.QtWidgets import (
     QStatusBar,
     QSystemTrayIcon,
     QTabWidget,
+    QVBoxLayout,
 )
 
 from app.controller import Controller
 from ui.history_widget import HistoryWidget
 from ui.pending_widget import PendingWidget
 from ui.settings_widget import SettingsWidget
+from ui.theme import ACCENT_VIOLET, GlassContainer
 
 
 def _make_tray_icon() -> QIcon:
     pixmap = QPixmap(16, 16)
-    pixmap.fill(QColor("#2980b9"))
+    pixmap.fill(QColor(ACCENT_VIOLET))
     return QIcon(pixmap)
 
 
@@ -39,7 +41,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("OrgAIzer -- AI School Subject Sorter")
+        self.setWindowTitle("OrgAIzer")
         self.setMinimumSize(780, 560)
         self.resize(960, 680)
 
@@ -73,20 +75,25 @@ class MainWindow(QMainWindow):
         self._tabs.addTab(self._pending, "Pending Decisions")
         self._tabs.addTab(self._history, "History")
         self._tabs.addTab(self._settings_widget, "Settings")
-        self.setCentralWidget(self._tabs)
+
+        glass = GlassContainer()
+        lay = QVBoxLayout(glass)
+        lay.setContentsMargins(8, 8, 8, 8)
+        lay.addWidget(self._tabs)
+        self.setCentralWidget(glass)
 
     def _build_status_bar(self) -> None:
         bar = QStatusBar()
         self._watch_label = QLabel()
         self._warmup_label = QLabel()
-        self._warmup_label.setStyleSheet("color: #f39c12; font-weight: bold;")
+        self._warmup_label.setObjectName("StatusWarning")
         bar.addWidget(self._watch_label)
         bar.addPermanentWidget(self._warmup_label)
         self.setStatusBar(bar)
 
     def _build_tray(self) -> None:
         self._tray = QSystemTrayIcon(_make_tray_icon(), self)
-        self._tray.setToolTip("OrgAIzer -- AI School Subject Sorter")
+        self._tray.setToolTip("OrgAIzer")
 
         menu = QMenu()
         show_action = QAction("Show", self)
@@ -121,7 +128,7 @@ class MainWindow(QMainWindow):
         self._tabs.setCurrentWidget(self._pending)
         self._tray.showMessage(
             "New file to sort",
-            f"{event.get('filename', '')} -- {event.get('overall_confidence', 0):.0%} confidence",
+            f"{event.get('filename', '')}  {event.get('overall_confidence', 0):.0%} confidence",
             QSystemTrayIcon.MessageIcon.Information,
             3000,
         )
@@ -222,9 +229,12 @@ class MainWindow(QMainWindow):
         labeled, required = self._controller.get_warmup_status()
         if self._controller.settings.warmup_active:
             self._warmup_label.setText(f"Warm-up: {labeled}/{required} labeled")
+            self._warmup_label.setObjectName("StatusWarning")
         else:
             self._warmup_label.setText("Auto-move: ON")
-            self._warmup_label.setStyleSheet("color: #2ecc71; font-weight: bold;")
+            self._warmup_label.setObjectName("StatusActive")
+        self._warmup_label.style().unpolish(self._warmup_label)
+        self._warmup_label.style().polish(self._warmup_label)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         event.ignore()

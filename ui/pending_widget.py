@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
+
+from ui.theme import TEXT_SECONDARY, conf_hex
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -46,20 +48,12 @@ def _is_valid_subject_input(subject: str) -> bool:
     return "/" not in normalized and "\\" not in normalized
 
 
-def _conf_color_hex(conf: float) -> str:
-    if conf >= _CONF_HIGH:
-        return "#2ecc71"
-    if conf >= _CONF_MED:
-        return "#f39c12"
-    return "#e74c3c"
-
-
 def _conf_label(conf: float) -> str:
     if conf >= _CONF_HIGH:
         return f"High confidence ({conf:.0%})"
     if conf >= _CONF_MED:
-        return f"Medium confidence ({conf:.0%}) -- please review"
-    return f"Low confidence ({conf:.0%}) -- please choose"
+        return f"Medium confidence ({conf:.0%}), please review"
+    return f"Low confidence ({conf:.0%}), please choose"
 
 
 class _ChangeDialog(QDialog):
@@ -93,7 +87,7 @@ class _ChangeDialog(QDialog):
         layout.addRow("Subject:", self._subject_combo)
 
         hint = QLabel("New subject names are allowed. Example: STS or Discrete Math")
-        hint.setStyleSheet("color: #888; font-style: italic; font-size: 10px;")
+        hint.setObjectName("HintLabel")
         hint.setWordWrap(True)
         layout.addRow("", hint)
 
@@ -140,13 +134,7 @@ class _PendingCard(QFrame):
     def _setup_ui(self) -> None:
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setFrameShadow(QFrame.Shadow.Raised)
-        self.setStyleSheet("""
-            _PendingCard, QFrame {
-                background: #2b2b2b;
-                border-radius: 6px;
-                border: 1px solid #444;
-            }
-        """)
+        self.setObjectName("PendingCard")
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         main = QVBoxLayout(self)
@@ -162,21 +150,20 @@ class _PendingCard(QFrame):
         main.addWidget(name_label)
 
         conf = self._event.get("overall_confidence", 0.0)
-        color = _conf_color_hex(conf)
         subject_label = QLabel(f"->  <b>{self._subject}</b>")
         subject_label.setTextFormat(Qt.TextFormat.RichText)
         main.addWidget(subject_label)
 
         conf_row = QHBoxLayout()
+        color = conf_hex(conf)
         conf_bar = QProgressBar()
         conf_bar.setRange(0, 100)
         conf_bar.setValue(int(conf * 100))
-        conf_bar.setFixedHeight(12)
+        conf_bar.setFixedHeight(10)
         conf_bar.setTextVisible(False)
-        conf_bar.setStyleSheet(f"""
-            QProgressBar {{ border-radius: 4px; background: #555; }}
-            QProgressBar::chunk {{ background: {color}; border-radius: 4px; }}
-        """)
+        conf_bar.setStyleSheet(
+            f"QProgressBar::chunk {{ background: {color}; border-radius: 6px; }}"
+        )
         conf_row.addWidget(conf_bar, stretch=3)
         conf_row.addWidget(QLabel(_conf_label(conf)), stretch=5)
         main.addLayout(conf_row)
@@ -184,24 +171,18 @@ class _PendingCard(QFrame):
         reason = self._event.get("reason", "")
         if reason:
             short_reason = reason.split("|")[-1].strip()
-            reason_label = QLabel(f'<i style="color:#aaa">{short_reason}</i>')
+            reason_label = QLabel(f'<i style="color:{TEXT_SECONDARY}">{short_reason}</i>')
             reason_label.setTextFormat(Qt.TextFormat.RichText)
             reason_label.setWordWrap(True)
             main.addWidget(reason_label)
 
         btn_row = QHBoxLayout()
         accept_btn = QPushButton("Accept")
-        accept_btn.setStyleSheet(
-            "QPushButton { background: #27ae60; color: white; border-radius: 4px; padding: 4px 12px; }"
-        )
+        accept_btn.setProperty("role", "accept")
         change_btn = QPushButton("Change")
-        change_btn.setStyleSheet(
-            "QPushButton { background: #2980b9; color: white; border-radius: 4px; padding: 4px 12px; }"
-        )
+        change_btn.setProperty("role", "change")
         skip_btn = QPushButton("Skip")
-        skip_btn.setStyleSheet(
-            "QPushButton { background: #7f8c8d; color: white; border-radius: 4px; padding: 4px 12px; }"
-        )
+        skip_btn.setProperty("role", "skip")
 
         valid_subject = bool(self._subject and self._subject != "Unknown")
         accept_btn.setEnabled(valid_subject)
@@ -245,15 +226,12 @@ class PendingWidget(QWidget):
         outer.setContentsMargins(8, 8, 8, 8)
 
         title = QLabel("Pending Decisions")
-        font = QFont()
-        font.setPointSize(12)
-        font.setBold(True)
-        title.setFont(font)
+        title.setObjectName("SectionTitle")
         outer.addWidget(title)
 
-        self._empty_label = QLabel("No pending files -- everything is sorted!")
+        self._empty_label = QLabel("No pending files. Everything is sorted!")
         self._empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._empty_label.setStyleSheet("color: #888; font-style: italic;")
+        self._empty_label.setObjectName("HintLabel")
         outer.addWidget(self._empty_label)
 
         scroll = QScrollArea()
