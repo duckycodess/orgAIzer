@@ -7,7 +7,9 @@ Columns: Time | Filename | Subject | Confidence | Action | Undo
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor, QFont
+from PySide6.QtGui import QFont
+
+from ui.theme import ACCENT_VIOLET, CONF_LOW, conf_qcolor
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -34,20 +36,6 @@ _ACTION_LABELS = {
     "pending": "Pending",
     "error": "Error",
 }
-
-_CONF_HIGH = 0.85
-_CONF_MED = 0.55
-
-
-def _conf_color(conf: float | None) -> QColor:
-    if conf is None:
-        return QColor("#888888")
-    if conf >= _CONF_HIGH:
-        return QColor("#2ecc71")
-    if conf >= _CONF_MED:
-        return QColor("#f39c12")
-    return QColor("#e74c3c")
-
 
 def _conf_label(conf: float | None) -> str:
     if conf is None:
@@ -89,7 +77,7 @@ class _SubjectPickerDialog(QDialog):
         layout.addRow("Subject:", self._combo)
 
         hint = QLabel("New subject names are allowed.")
-        hint.setStyleSheet("color: #666; font-size: 11px;")
+        hint.setObjectName("HintLabel")
         layout.addRow("", hint)
 
         buttons = QDialogButtonBox(
@@ -135,14 +123,22 @@ class HistoryWidget(QWidget):
 
         header = QHBoxLayout()
         title = QLabel("File History")
-        font = QFont()
-        font.setPointSize(12)
-        font.setBold(True)
-        title.setFont(font)
+        title.setObjectName("SectionTitle")
         header.addWidget(title)
         header.addStretch()
         self._refresh_btn = QPushButton("Refresh")
         self._refresh_btn.setFixedWidth(80)
+        self._refresh_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: rgba(138, 101, 255, 0.25);
+                border: 1px solid {ACCENT_VIOLET};
+                border-radius: 12px;
+                color: #c4b0ff;
+                font-weight: 600;
+                padding: 4px 12px;
+            }}
+            QPushButton:hover {{ background: rgba(138, 101, 255, 0.45); }}
+        """)
         header.addWidget(self._refresh_btn)
         layout.addLayout(header)
 
@@ -152,10 +148,13 @@ class HistoryWidget(QWidget):
         ])
         self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self._table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
+        self._table.setColumnWidth(5, 150)
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._table.setAlternatingRowColors(True)
         self._table.verticalHeader().setVisible(False)
+        self._table.verticalHeader().setDefaultSectionSize(36)
         layout.addWidget(self._table)
 
         self._refresh_btn.clicked.connect(self.refresh_requested)
@@ -210,7 +209,7 @@ class HistoryWidget(QWidget):
             if col == 1:
                 item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             if col == 3:
-                item.setForeground(_conf_color(overall_conf))
+                item.setForeground(conf_qcolor(overall_conf))
                 font = QFont()
                 font.setBold(True)
                 item.setFont(font)
@@ -219,16 +218,43 @@ class HistoryWidget(QWidget):
         stage = evt.get("stage", "")
         if stage == "moved" and action != "undone":
             btn = QPushButton("Undo")
-            btn.setFixedWidth(60)
+            btn.setFixedWidth(80)
             btn.setProperty("event_id", event_id)
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: rgba(255, 107, 138, 0.30);
+                    border: 1px solid {CONF_LOW};
+                    border-radius: 8px;
+                    color: {CONF_LOW};
+                    font-weight: 600;
+                    padding: 3px 6px;
+                }}
+                QPushButton:hover {{
+                    background: rgba(255, 107, 138, 0.50);
+                }}
+            """)
             btn.clicked.connect(
                 lambda checked=False, eid=event_id: self.undo_requested.emit(eid)
             )
             self._table.setCellWidget(row, 5, btn)
         elif stage == "not_school" and evt.get("user_action") is None:
             btn = QPushButton("Mark as School")
-            btn.setFixedWidth(110)
+            btn.setFixedWidth(140)
             btn.setProperty("event_id", event_id)
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: rgba(138, 101, 255, 0.30);
+                    border: 1px solid {ACCENT_VIOLET};
+                    border-radius: 8px;
+                    color: #c4b0ff;
+                    font-weight: 600;
+                    padding: 3px 6px;
+                    font-size: 11px;
+                }}
+                QPushButton:hover {{
+                    background: rgba(138, 101, 255, 0.50);
+                }}
+            """)
             btn.clicked.connect(
                 lambda checked=False, eid=event_id: self._on_mark_as_school_clicked(eid)
             )

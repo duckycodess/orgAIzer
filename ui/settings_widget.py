@@ -14,7 +14,6 @@ Controls:
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QCheckBox,
     QFileDialog,
@@ -62,10 +61,7 @@ class SettingsWidget(QWidget):
 
         # Title
         title = QLabel("Settings")
-        font = QFont()
-        font.setPointSize(13)
-        font.setBold(True)
-        title.setFont(font)
+        title.setObjectName("SectionTitle")
         layout.addWidget(title)
 
         # --- Folder Settings ---
@@ -91,7 +87,7 @@ class SettingsWidget(QWidget):
         folder_form.addRow("Dev/test watch folder:", wo_row)
 
         hint = QLabel("Set a dev folder to test without touching real Downloads.")
-        hint.setStyleSheet("color: #888; font-style: italic; font-size: 10px;")
+        hint.setObjectName("HintLabel")
         folder_form.addRow("", hint)
 
         self._school_root_edit = QLineEdit()
@@ -103,9 +99,9 @@ class SettingsWidget(QWidget):
         folder_form.addRow("School root folder:", sr_row)
 
         self._rescan_btn = QPushButton("Rescan Subject Folders")
-        self._rescan_btn.setStyleSheet("QPushButton { background: #2980b9; color: white; padding: 4px 12px; border-radius: 4px; }")
+        self._rescan_btn.setProperty("role", "change")
         self._rescan_status = QLabel("")
-        self._rescan_status.setStyleSheet("color: #2ecc71;")
+        self._rescan_status.setObjectName("StatusActive")
         rescan_row = QHBoxLayout()
         rescan_row.addWidget(self._rescan_btn)
         rescan_row.addWidget(self._rescan_status)
@@ -136,7 +132,7 @@ class SettingsWidget(QWidget):
         warmup_layout.addWidget(self._warmup_check)
 
         self._warmup_status = QLabel("")
-        self._warmup_status.setStyleSheet("color: #aaa; font-style: italic;")
+        self._warmup_status.setObjectName("StatusLabel")
         warmup_layout.addWidget(self._warmup_status)
 
         layout.addWidget(warmup_group)
@@ -146,9 +142,9 @@ class SettingsWidget(QWidget):
         model_layout = QVBoxLayout(model_group)
 
         self._retrain_btn = QPushButton("Refresh Model")
-        self._retrain_btn.setStyleSheet("QPushButton { background: #8e44ad; color: white; padding: 4px 12px; border-radius: 4px; }")
+        self._retrain_btn.setProperty("role", "primary")
         self._retrain_status = QLabel("")
-        self._retrain_status.setStyleSheet("color: #aaa;")
+        self._retrain_status.setObjectName("StatusLabel")
         retrain_row = QHBoxLayout()
         retrain_row.addWidget(self._retrain_btn)
         retrain_row.addWidget(self._retrain_status)
@@ -162,7 +158,7 @@ class SettingsWidget(QWidget):
         save_row = QHBoxLayout()
         save_row.addStretch()
         self._save_btn = QPushButton("Save Settings")
-        self._save_btn.setStyleSheet("QPushButton { background: #27ae60; color: white; padding: 6px 20px; border-radius: 4px; font-weight: bold; }")
+        self._save_btn.setProperty("role", "primary")
         save_row.addWidget(self._save_btn)
         layout.addLayout(save_row)
         layout.addStretch()
@@ -208,9 +204,12 @@ class SettingsWidget(QWidget):
             self._warmup_status.setText(
                 f"Progress: {count} / {WARMUP_MIN_SCHOOL_LABELS} labeled school files"
             )
+            self._warmup_status.setObjectName("StatusLabel")
         else:
             self._warmup_status.setText("Auto-move is ENABLED")
-            self._warmup_status.setStyleSheet("color: #2ecc71; font-style: italic;")
+            self._warmup_status.setObjectName("StatusActive")
+        self._warmup_status.style().unpolish(self._warmup_status)
+        self._warmup_status.style().polish(self._warmup_status)
 
     def _on_save(self) -> None:
         s = self._settings

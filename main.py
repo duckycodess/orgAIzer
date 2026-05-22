@@ -23,6 +23,7 @@ from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt
 
 from ui.main_window import MainWindow
+from ui.theme import load_stylesheet
 
 
 def _configure_logging() -> None:
@@ -37,8 +38,9 @@ def main() -> int:
     _configure_logging()
 
     app = QApplication(sys.argv)
+    app.setStyleSheet(load_stylesheet())
     app.setApplicationName("OrgAIzer")
-    app.setApplicationDisplayName("OrgAIzer -- AI School Subject Sorter")
+    app.setApplicationDisplayName("OrgAIzer")
     app.setOrganizationName("CS180")
 
     # Keep the app alive when the last window is closed (tray mode).
