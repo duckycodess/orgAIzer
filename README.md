@@ -242,6 +242,10 @@ Important:
 ```text
 orgAIzer/
 ├── main.py
+├── pretrained/
+│   ├── orgaizer.db
+│   ├── school_detector.pkl
+│   └── subject_predictor.pkl
 ├── app/
 │   ├── controller.py
 │   └── settings.py
@@ -269,6 +273,39 @@ orgAIzer/
     ├── pending_widget.py
     └── settings_widget.py
 ```
+
+## Using a Pre-Trained Model
+
+The `pretrained/` folder in this repo contains the trained model files so you can skip seeding and training entirely.
+
+### 1. Clone the repo and set up the venv
+
+```bash
+git clone <repo-url>
+cd orgAIzer
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 2. Copy the pretrained files into place
+
+```bash
+mkdir -p ~/OrgAIzer/models
+cp pretrained/orgaizer.db ~/OrgAIzer/orgaizer.db
+cp pretrained/school_detector.pkl ~/OrgAIzer/models/school_detector.pkl
+cp pretrained/subject_predictor.pkl ~/OrgAIzer/models/subject_predictor.pkl
+```
+
+### 3. Run the app
+
+```bash
+python main.py
+```
+
+The model is already trained — no need to seed or click Refresh Model.
+
+---
 
 ## Notes
 
