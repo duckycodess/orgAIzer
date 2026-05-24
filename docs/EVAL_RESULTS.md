@@ -2,69 +2,68 @@
 
 ## §3 Dataset Table
 
-| Subject | # Training Samples | # Files in Folder |
-|---------|--------------------|-------------------|
-| ARTS    | 5                  | 10                |
-| CS138   | 15                 | 15                |
-| CS140   | 15                 | 15                |
-| CS145   | 1                  | 17                |
-| CS174   | 0                  | 13                |
-| CS180   | 4                  | 9                 |
-| CS32    | 25                 | 25                |
-| CS33    | 32                 | 24                |
-| SPEECH  | 17                 | 17                |
-| STS     | 8                  | 9                 |
-| Not-School | 26              | —                 |
-| **Total** | **148**          | **154**           |
+| Subject    | Total Files | Train (70%) | Test (30%) |
+|------------|-------------|-------------|------------|
+| ARTS       | 24          | 16          | 8          |
+| CS138      | 15          | 11          | 4          |
+| CS140      | 15          | 11          | 4          |
+| CS145      | 17          | 11          | 6          |
+| CS174      | 15          | 11          | 4          |
+| CS180      | 15          | 11          | 4          |
+| CS32       | 25          | 17          | 8          |
+| CS33       | 24          | 16          | 8          |
+| NOT_SCHOOL | 23          | 17          | 6          |
+| SPEECH     | 17          | 11          | 6          |
+| STS        | 22          | 16          | 6          |
+| **Total**  | **212**     | **148**     | **64**     |
 
-> CS145 has 1 sample; CS174 has 0 — effectively untrained classes.
+Split: stratified 70/30, seed=42.
 
 ---
 
 ## §3 Data Split Table
 
-| Split      | Count | %     |
-|------------|-------|-------|
-| Train      | 102   | 68.9% |
-| Validation | 23    | 15.5% |
-| Test       | 23    | 15.5% |
-| **Total**  | **148** | 100% |
-
-Stratified split (seed=42), maintaining class proportions per subject.
+| Split     | Count | %    |
+|-----------|-------|------|
+| Train     | 148   | 69.8% |
+| Test      | 64    | 30.2% |
+| **Total** | **212** | 100% |
 
 ---
 
 ## §5 SchoolDetector Metrics
 
-| Class        | Precision | Recall | F1    | Support |
-|--------------|-----------|--------|-------|---------|
-| Not-School   | 0.000     | 0.000  | 0.000 | 4       |
-| School       | 0.826     | 1.000  | 0.905 | 19      |
-| **Accuracy** |           |        | **0.826** | 23  |
-| Macro avg    | 0.413     | 0.500  | 0.452 | 23      |
-| Weighted avg | 0.682     | 0.826  | 0.747 | 23      |
+| Class        | Precision | Recall | F1     | Support |
+|--------------|-----------|--------|--------|---------|
+| Not-School   | 1.0000    | 0.4000 | 0.5714 | 5       |
+| School       | 0.9483    | 1.0000 | 0.9735 | 55      |
+| **Accuracy** |           |        | **0.9500** | 60  |
+| Macro avg    | 0.9741    | 0.7000 | 0.7724 | 60      |
+| Weighted avg | 0.9526    | 0.9500 | 0.9399 | 60      |
 
-Confusion matrix image: `cm_school_detector.png`
+Confusion matrix: `cm_school_detector_test_School.png`
 
 ---
 
 ## §5 SubjectPredictor Metrics
 
-| Subject      | Precision | Recall | F1    | Support |
-|--------------|-----------|--------|-------|---------|
-| ARTS         | 0.333     | 1.000  | 0.500 | 1       |
-| CS138        | 1.000     | 1.000  | 1.000 | 2       |
-| CS140        | 1.000     | 1.000  | 1.000 | 2       |
-| CS180        | 1.000     | 1.000  | 1.000 | 1       |
-| CS32         | 1.000     | 1.000  | 1.000 | 4       |
-| CS33         | 1.000     | 1.000  | 1.000 | 5       |
-| SPEECH       | 0.000     | 0.000  | 0.000 | 3       |
-| STS          | 0.000     | 0.000  | 0.000 | 1       |
-| **Accuracy** |           |        | **0.789** | 19  |
-| Macro avg    | 0.667     | 0.750  | 0.688 | 19      |
-| Weighted avg | 0.754     | 0.789  | 0.763 | 19      |
+| Subject      | Precision | Recall | F1     | Support |
+|--------------|-----------|--------|--------|---------|
+| ARTS         | 0.4545    | 0.8333 | 0.5882 | 6       |
+| CS138        | 1.0000    | 0.7500 | 0.8571 | 4       |
+| CS140        | 1.0000    | 1.0000 | 1.0000 | 4       |
+| CS145        | 1.0000    | 1.0000 | 1.0000 | 6       |
+| CS174        | 1.0000    | 1.0000 | 1.0000 | 4       |
+| CS180        | 1.0000    | 1.0000 | 1.0000 | 4       |
+| CS32         | 1.0000    | 1.0000 | 1.0000 | 8       |
+| CS33         | 1.0000    | 0.8750 | 0.9333 | 8       |
+| SPEECH       | 1.0000    | 0.6667 | 0.8000 | 6       |
+| STS          | 0.7500    | 0.6000 | 0.6667 | 5       |
+| **Accuracy** |           |        | **0.8727** | 55  |
+| Macro avg    | 0.9205    | 0.8725 | 0.8845 | 55      |
+| Weighted avg | 0.9178    | 0.8727 | 0.8829 | 55      |
 
-Confusion matrix image: `cm_subject_predictor.png`
+Confusion matrix: `cm_subject_predictor_test_School.png`
 
 ---
 
@@ -72,19 +71,19 @@ Confusion matrix image: `cm_subject_predictor.png`
 
 Full pipeline: text extraction + SchoolDetector + SubjectPredictor.
 
-| File Type | Avg (ms) | Min (ms) | Max (ms) | n |
-|-----------|----------|----------|----------|---|
-| PDF       | 99.3     | 60.7     | 194.9    | 8 |
-| DOCX      | 80.2     | 7.1      | 197.2    | 4 |
+| File Type | Avg (ms) | Min (ms) | Max (ms) | n  |
+|-----------|----------|----------|----------|----|
+| PDF       | 343.3    | 40.3     | 881.7    | 57 |
+| DOCX      | 42.7     | 2.2      | 67.6     | 3  |
+
+> PDF latency is dominated by text extraction (pdfplumber). Variance is high due to varying PDF size and complexity.
 
 ---
 
 ## §5 Discussion
 
-SchoolDetector achieves 82.6% overall accuracy but **fails entirely on Not-School** (F1=0.000) — the keyword rules are too aggressive, flagging all 4 not-school test samples as school. Root cause: only 26 not-school training samples, insufficient to let the LR overlay override the keyword stage.
+**SchoolDetector** achieves 95.0% overall accuracy with perfect precision on Not-School (1.000) but low recall (0.400) — it misses 3 of 5 not-school files, classifying them as school. This is expected: the keyword rules are aggressive and fire on generic terms (e.g., "notes", "document"). School recall is perfect (1.000), meaning no school files are ever missed. For a file organizer, this tradeoff is acceptable — false positives (non-school files routed to Pending) are recoverable, while false negatives (school files ignored) are not.
 
-SubjectPredictor scores 78.9% accuracy on school files. CS32, CS33, CS138, CS140, and CS180 achieve perfect F1 — these subjects have sufficient samples (4–32) and distinctive filenames/content. **SPEECH (F1=0.000) and STS (F1=0.000) fail** completely; their test samples were misclassified as ARTS, consistent with the ARTS default-fallback bias and low per-class sample counts (STS test n=1, SPEECH test n=3).
+**SubjectPredictor** achieves 87.3% accuracy on school files. CS140, CS145, CS174, CS180, and CS32 achieve perfect F1, reflecting distinctive filenames and course codes. **ARTS** has the lowest precision (0.455) — other subjects' files are predicted as ARTS when the model is uncertain, consistent with ARTS being the alphabetical fallback. **STS** (F1=0.667) and **SPEECH** (F1=0.800) show moderate performance; both have fewer distinctive keywords and smaller training sets relative to CS32/CS33.
 
-ARTS has only 5 training samples yet the model defaults to it when no strong signal is found, inflating its apparent recall while harming SPEECH and STS precision.
-
-**To improve:** add 10–15 more samples each for SPEECH, STS, and ARTS, then retrain. The LR pipeline already uses `class_weight="balanced"` — fixing the data imbalance is sufficient.
+**Latency** is acceptable for background processing. PDF extraction averages 343 ms due to pdfplumber parsing overhead; DOCX is much faster at 43 ms. Since classification runs asynchronously after download completion, end-user experience is unaffected.
