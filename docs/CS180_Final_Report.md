@@ -33,7 +33,7 @@ The final prototype includes:
 
 - **Two-stage ML classification pipeline:** `SchoolDetector` (binary: school vs. not-school) and `SubjectPredictor` (multi-class: which subject folder).
 - **Hybrid cold-start strategy:** keyword/regex rules provide immediate predictions before the model has seen any labeled data; a Logistic Regression overlay activates once enough examples accumulate.
-- **Desktop GUI** built with PySide6 (Qt6) featuring three tabs: Pending Decisions, History, and Settings.
+- **Desktop GUI** built with Tauri (Rust shell) and a React/TypeScript frontend, featuring three tabs: Pending Decisions, History, and Settings.
 - **Persistent feedback loop:** user decisions are stored in a local SQLite database and trigger background model retraining every 5 corrections.
 - **Multi-format file support:** PDF, DOCX, PPTX, TXT, ZIP archives, and entire project folders.
 - **Warm-up mode:** prevents premature auto-moves until the model has seen at least 25 confirmed school files (5 per subject minimum).
@@ -149,19 +149,25 @@ No data leakage occurs: seed data is derived from files the user has already org
 
 ### System Architecture
 
-OrgAIzer follows a layered desktop architecture. The PySide6 GUI communicates exclusively through Qt signals with the Controller, which owns the database, classifiers, and file watcher. No direct coupling exists between UI components and ML code.
+OrgAIzer follows a layered desktop architecture. The Tauri frontend communicates with a locally running FastAPI server via REST calls and Server-Sent Events (SSE). The Python backend owns the classifiers, file watcher, and SQLite database. Everything runs on the user's machine; no network access is required.
 
 ```mermaid
 graph TD
-    subgraph GUI["PySide6 GUI Layer"]
+    subgraph GUI["Tauri Desktop App (React + TypeScript)"]
         PD["Pending Decisions Tab"]
         HT["History Tab"]
         ST["Settings Tab"]
     end
 
-    subgraph CTRL["Controller (app/controller.py)"]
+    subgraph API["Local REST API (FastAPI · localhost:8000)"]
+        ROUTES["Routes: /api/pending · /api/history\n/api/settings · /api/watcher"]
+        SSE["SSE Stream\n(/api/events)"]
+    end
+
+    subgraph CTRL["APIController (app/api_controller.py)"]
         FW["File Watcher\n(watchdog · OS thread)"]
-        RW["Retraining Worker\n(QThread · background)"]
+        RW["Retraining Worker\n(background thread)"]
+        EQ["Async Event Queue"]
     end
 
     subgraph PIPE["AI Classification Pipeline"]
@@ -180,16 +186,20 @@ graph TD
         TABLES[("settings · file_events · training_samples")]
     end
 
-    PD & HT & ST <-->|"Qt Signals"| CTRL
+    PD & HT & ST <-->|"HTTP REST"| ROUTES
+    SSE -->|"real-time events"| GUI
+    ROUTES <--> CTRL
     FW --> NFD
+    EQ --> SSE
     NFD --> SC --> FE --> SD
     SD -->|"Not school"| LOG
     SD -->|"Is school"| SP
     SP -->|"conf ≥ 0.85 + warmup OFF"| AM
     SP -->|"uncertain"| PR
-    PR -->|"Accept / Change"| TS
-    PR -->|"Skip"| LOG
+    PR -->|"Accept / Correct"| TS
+    PR -->|"Not School"| LOG
     TS -->|"every 5 corrections"| RW
+    CTRL --> EQ
     PIPE <--> DB
 ```
 
@@ -351,7 +361,7 @@ All measured inference times are well within the 2-second requirement. PDF extra
 ![Settings tab](ss_settings.png)
 *Figure 3: Settings tab for configuring watch folder, thresholds, and model options.*
 
-OrgAIzer's interface is a three-tab desktop window with a dark theme, designed to require minimal interaction from the user during normal operation.
+OrgAIzer's interface is a three-tab Tauri desktop window with a glassmorphism dark theme, designed to require minimal interaction from the user during normal operation.
 
 **Tab 1: Pending Decisions**
 
@@ -365,17 +375,16 @@ This is the primary interaction surface. A student using OrgAIzer daily might sp
 
 **Tab 2: History**
 
-A complete log of every file the app has ever processed, with columns for timestamp, filename, predicted subject, confidence score, and final action taken (auto-moved, user-accepted, user-corrected, skipped). This tab provides full transparency into the model's behavior and allows users to audit decisions.
+A complete log of every file the app has ever processed, with columns for timestamp, filename, predicted subject, confidence score, and final action taken (Accepted, Skipped, Undone, Pending). A search bar allows filtering by filename or subject. Accepted entries show an **Undo** button that reverses the file move and removes the sample from training data.
 
 **Tab 3: Settings**
 
-Configuration controls including:
-- Watch folder path (defaults to `~/Downloads`)
-- School root path (parent folder containing subject subfolders)
-- High-confidence threshold (default 0.85, controls auto-move cutoff)
-- Medium-confidence threshold (default 0.55, controls pending review cutoff)
-- Warm-up mode toggle (disable once model is sufficiently trained)
-- **Refresh Model** button: manually triggers immediate retraining on all accumulated samples
+Configuration controls grouped into sections:
+- **Paths:** watch folder, school root, and an optional watch folder override
+- **Confidence Thresholds:** sliders for auto-move cutoff (default 0.85) and review cutoff (default 0.55)
+- **Warmup Mode:** toggle with a progress bar showing labeled samples toward the 25-file threshold
+- **Subject Folders:** scan an existing folder path to discover subject subfolders
+- **Training:** seed from an organized folder, manually retrain, or clear all training data
 
 All settings are persisted to SQLite and restored on next launch.
 
@@ -393,7 +402,7 @@ flowchart TD
     G -->|"Change subject"| H
     G -->|"Skip"| I["Left in Downloads\n(labeled not-school)"]
     H --> J{"5 corrections\naccumulated?"}
-    J -->|"Yes"| K(["Model retrains in background\n(QThread)"])
+    J -->|"Yes"| K(["Model retrains in background\n(background thread)"])
     J -->|"No"| B
     K --> B
 ```
@@ -402,12 +411,14 @@ The output shown to users is always actionable (e.g., "Move to **Speech**?") rat
 
 ### Integration
 
-OrgAIzer is a **fully self-contained desktop application** with no external API dependencies:
+OrgAIzer is a **fully self-contained desktop application** that requires no internet connection:
 
-- **ML models** are embedded directly in the app as joblib-serialized `.pkl` files loaded from `~/OrgAIzer/models/` at startup. There is no separate model server or Flask API; `predict_proba()` is called in-process.
-- **File monitoring** uses the `watchdog` library, which wraps OS-native file system event APIs (inotify on Linux, FSEvents on macOS, ReadDirectoryChangesW on Windows). The watcher runs in its own OS thread and dispatches file events to the Controller via a thread-safe callback.
-- **Retraining** runs in a `QThread`-based worker (`_RetrainWorker`) that calls `SchoolDetector.retrain()` and `SubjectPredictor.retrain()` with all accumulated training samples, then saves updated `.pkl` files to disk. The Qt thread boundary ensures the UI stays responsive during retraining.
-- **Database** is a local SQLite file in WAL (Write-Ahead Logging) mode, allowing concurrent reads from the UI thread while the watcher thread writes new events.
+- **Frontend** is a Tauri app (Rust shell bundling a React/TypeScript UI with a glassmorphism dark theme). It communicates with the Python backend exclusively over `localhost`; no external servers are involved.
+- **Backend** is a FastAPI server (`api/main.py`) launched as a bundled sidecar process on `localhost:8000`. The frontend polls REST endpoints (`/api/pending`, `/api/history`, `/api/settings`) and subscribes to a Server-Sent Events stream (`/api/events`) for real-time file classification notifications.
+- **ML models** are loaded from joblib-serialized `.pkl` files at startup by the `APIController`. `predict_proba()` is called in-process within the Python backend; no model server or external inference API is used.
+- **File monitoring** uses the `watchdog` library, which wraps OS-native file system event APIs (inotify on Linux, FSEvents on macOS, ReadDirectoryChangesW on Windows). The watcher runs in its own OS thread and dispatches events to an async queue that feeds the SSE stream.
+- **Retraining** runs in a background thread inside `APIController`, calling `SchoolDetector.retrain()` and `SubjectPredictor.retrain()` every 5 user corrections and saving updated `.pkl` files to disk.
+- **Database** is a local SQLite file in WAL (Write-Ahead Logging) mode, allowing concurrent reads from the API layer while the watcher thread writes new events.
 - **No network access:** zero outbound connections, no telemetry, no cloud calls.
 
 ---
