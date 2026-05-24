@@ -193,8 +193,17 @@ class Controller(QObject):
     def scan_course_folders(self, school_root: str) -> int:
         return self.scan_subject_folders(school_root)
 
+    def clear_training_samples(self) -> None:
+        """Delete all training samples from the database."""
+        self._conn.execute("DELETE FROM training_samples")
+        self._conn.commit()
+
     def seed_from_folder(self, folder: str) -> int:
-        """Read an organized school folder and insert bootstrap training samples."""
+        """Read an organized training folder and insert bootstrap training samples.
+
+        A subfolder named NOT_SCHOOL (case-insensitive) produces label_school=0
+        samples. All other subfolders produce label_school=1 samples.
+        """
         root = Path(folder)
         if not root.is_dir():
             return 0
@@ -203,6 +212,7 @@ class Controller(QObject):
             if not subject_dir.is_dir():
                 continue
             subject_name = subject_dir.name
+            is_not_school = subject_name.upper() == "NOT_SCHOOL"
             for file_path in sorted(subject_dir.rglob("*")):
                 if not file_path.is_file():
                     continue
@@ -220,8 +230,8 @@ class Controller(QObject):
                     text_features=json.dumps(text),
                     extension=file_path.suffix.lower(),
                     file_size=0,
-                    label_school=1,
-                    label_subject=subject_name,
+                    label_school=0 if is_not_school else 1,
+                    label_subject=None if is_not_school else subject_name,
                     source="bootstrap",
                 )
                 count += 1

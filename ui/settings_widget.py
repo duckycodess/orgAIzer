@@ -43,7 +43,9 @@ class SettingsWidget(QWidget):
     # Emitted when user clicks Refresh Model.
     retrain_requested = Signal()
     # Emitted when user clicks Import Training Data.
-    seed_requested = Signal(str)  # school_root path
+    seed_requested = Signal(str)  # training folder path
+    # Emitted when user clicks Clear Training Data.
+    clear_requested = Signal()
 
     def __init__(self, settings: AppSettings, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -145,13 +147,16 @@ class SettingsWidget(QWidget):
 
         self._import_btn = QPushButton("Import Training Data")
         self._import_btn.setProperty("role", "change")
+        self._clear_btn = QPushButton("Clear Training Data")
+        self._clear_btn.setProperty("role", "danger")
         self._import_status = QLabel("")
         self._import_status.setObjectName("StatusLabel")
         import_row = QHBoxLayout()
         import_row.addWidget(self._import_btn)
+        import_row.addWidget(self._clear_btn)
         import_row.addWidget(self._import_status)
         import_row.addStretch()
-        model_layout.addWidget(QLabel("Bootstrap model from existing school root folder:"))
+        model_layout.addWidget(QLabel("Bootstrap model from a labeled training folder:"))
         model_layout.addLayout(import_row)
 
         self._retrain_btn = QPushButton("Refresh Model")
@@ -193,6 +198,7 @@ class SettingsWidget(QWidget):
         )
         self._rescan_btn.clicked.connect(self._on_rescan)
         self._import_btn.clicked.connect(self._on_import)
+        self._clear_btn.clicked.connect(self._on_clear)
         self._retrain_btn.clicked.connect(self._on_retrain)
         self._save_btn.clicked.connect(self._on_save)
 
@@ -245,17 +251,29 @@ class SettingsWidget(QWidget):
         self._rescan_status.setText(f"Found {count} subject folder(s)")
 
     def _on_import(self) -> None:
-        path = self._school_root_edit.text().strip()
-        if not path:
-            self._import_status.setText("Set school root first.")
+        folder = QFileDialog.getExistingDirectory(
+            self, "Select Training Data Folder (with subject subfolders)"
+        )
+        if not folder:
             return
         self._import_status.setText("Importing…")
         self._import_btn.setEnabled(False)
-        self.seed_requested.emit(path)
+        self.seed_requested.emit(folder)
 
     def on_import_done(self, count: int) -> None:
         self._import_status.setText(f"{count} samples imported. Retraining…")
         self._import_btn.setEnabled(True)
+
+    def _on_clear(self) -> None:
+        from PySide6.QtWidgets import QMessageBox
+        reply = QMessageBox.warning(
+            self, "Clear Training Data",
+            "Delete all training samples? This cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self.clear_requested.emit()
+            self._import_status.setText("Training data cleared.")
 
     def _on_retrain(self) -> None:
         self._retrain_status.setText("Retraining in background…")
@@ -263,6 +281,8 @@ class SettingsWidget(QWidget):
 
     def on_retrain_done(self) -> None:
         self._retrain_status.setText("Model updated!")
+        if "Retraining" in self._import_status.text():
+            self._import_status.setText("Import + retrain complete!")
 
     def update_warmup_display(self) -> None:
         self._warmup_check.setChecked(self._settings.warmup_active)
