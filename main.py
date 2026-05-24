@@ -19,11 +19,17 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from PySide6.QtGui import QFontDatabase
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt
 
 from ui.main_window import MainWindow
 from ui.theme import load_stylesheet
+
+
+def _load_fonts() -> None:
+    for ttf in (PROJECT_ROOT / "ui" / "fonts" / "extras" / "ttf").glob("Inter-*.ttf"):
+        QFontDatabase.addApplicationFont(str(ttf))
 
 
 def _configure_logging() -> None:
@@ -38,6 +44,7 @@ def main() -> int:
     _configure_logging()
 
     app = QApplication(sys.argv)
+    _load_fonts()
     app.setStyleSheet(load_stylesheet())
     app.setApplicationName("OrgAIzer")
     app.setApplicationDisplayName("OrgAIzer")
