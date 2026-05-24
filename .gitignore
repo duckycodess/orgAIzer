@@ -2,3 +2,14 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+
+# Rust/Tauri build artifacts
+tauri-app/src-tauri/target/
+
+# Node
+tauri-app/node_modules/
+
+# Python build
+dist/
+build/
+*.spec.bak
