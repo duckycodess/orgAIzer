@@ -122,6 +122,7 @@ class MainWindow(QMainWindow):
         self._settings_widget.rescan_requested.connect(self._on_rescan_requested)
         self._settings_widget.retrain_requested.connect(self._on_retrain_requested)
         self._settings_widget.seed_requested.connect(self._on_import_requested)
+        self._settings_widget.clear_requested.connect(self._on_clear_requested)
         self._history._refresh_btn.clicked.connect(self._refresh_history)
 
     def _on_file_classified(self, event: dict) -> None:
@@ -217,10 +218,17 @@ class MainWindow(QMainWindow):
     def _on_retrain_requested(self) -> None:
         self._controller.trigger_retrain()
 
+    def _on_clear_requested(self) -> None:
+        self._controller.clear_training_samples()
+
     def _on_import_requested(self, path: str) -> None:
         count = self._controller.seed_from_folder(path)
         self._settings_widget.on_import_done(count)
         if count > 0:
+            self._controller.scan_subject_folders(path)
+            subject_names = self._controller.get_subject_names()
+            self._pending.set_subject_names(subject_names)
+            self._history.set_subject_names(subject_names)
             self._controller.trigger_retrain()
 
     def _refresh_history(self) -> None:
