@@ -23,7 +23,7 @@ fi
 
 echo "==> Building Tauri app (frontend + Rust)..."
 cd tauri-app
-npm run tauri -- build
+npm run tauri -- build -- --config '{"bundle":{"externalBin":["binaries/api-server"]}}'
 
 echo ""
 echo "==> Done. Installer in:"
