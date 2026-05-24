@@ -10,23 +10,23 @@ from PySide6.QtGui import QColor, QLinearGradient, QPainter
 from PySide6.QtWidgets import QWidget
 
 # -- Background gradient --
-BG_DEEP   = "#0f0c29"
-BG_MID    = "#302b63"
-BG_LIGHT  = "#24243e"
+BG_DEEP   = "#06041a"
+BG_MID    = "#120d30"
+BG_LIGHT  = "#1a1245"
 
 # -- Accent colors --
-ACCENT_VIOLET = "#8a65ff"
-ACCENT_CYAN   = "#00d4ff"
+ACCENT_VIOLET = "#9d7dff"
+ACCENT_CYAN   = "#00e5ff"
 
 # -- Confidence colors --
-CONF_HIGH = "#00ffc6"  # teal
+CONF_HIGH = "#00e5ff"  # cyan
 CONF_MED  = "#ffb347"  # amber
-CONF_LOW  = "#ff6b8a"  # rose
+CONF_LOW  = "#ff6b9d"  # rose
 
 # -- Text --
-TEXT_PRIMARY   = "#f0eeff"
+TEXT_PRIMARY   = "#ede9ff"
 TEXT_SECONDARY = "#a89ec9"
-TEXT_MUTED     = "#6b6490"
+TEXT_MUTED     = "#4e4875"
 
 _CONF_HIGH_THRESH = 0.85
 _CONF_MED_THRESH  = 0.55
