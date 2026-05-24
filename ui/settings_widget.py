@@ -42,6 +42,8 @@ class SettingsWidget(QWidget):
     rescan_requested = Signal(str)  # school_root path
     # Emitted when user clicks Refresh Model.
     retrain_requested = Signal()
+    # Emitted when user clicks Import Training Data.
+    seed_requested = Signal(str)  # school_root path
 
     def __init__(self, settings: AppSettings, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -141,6 +143,17 @@ class SettingsWidget(QWidget):
         model_group = QGroupBox("AI Model")
         model_layout = QVBoxLayout(model_group)
 
+        self._import_btn = QPushButton("Import Training Data")
+        self._import_btn.setProperty("role", "change")
+        self._import_status = QLabel("")
+        self._import_status.setObjectName("StatusLabel")
+        import_row = QHBoxLayout()
+        import_row.addWidget(self._import_btn)
+        import_row.addWidget(self._import_status)
+        import_row.addStretch()
+        model_layout.addWidget(QLabel("Bootstrap model from existing school root folder:"))
+        model_layout.addLayout(import_row)
+
         self._retrain_btn = QPushButton("Refresh Model")
         self._retrain_btn.setProperty("role", "primary")
         self._retrain_status = QLabel("")
@@ -179,6 +192,7 @@ class SettingsWidget(QWidget):
             lambda: self._pick_folder(self._school_root_edit, "Select School root folder")
         )
         self._rescan_btn.clicked.connect(self._on_rescan)
+        self._import_btn.clicked.connect(self._on_import)
         self._retrain_btn.clicked.connect(self._on_retrain)
         self._save_btn.clicked.connect(self._on_save)
 
@@ -229,6 +243,19 @@ class SettingsWidget(QWidget):
 
     def on_rescan_done(self, count: int) -> None:
         self._rescan_status.setText(f"Found {count} subject folder(s)")
+
+    def _on_import(self) -> None:
+        path = self._school_root_edit.text().strip()
+        if not path:
+            self._import_status.setText("Set school root first.")
+            return
+        self._import_status.setText("Importing…")
+        self._import_btn.setEnabled(False)
+        self.seed_requested.emit(path)
+
+    def on_import_done(self, count: int) -> None:
+        self._import_status.setText(f"{count} samples imported. Retraining…")
+        self._import_btn.setEnabled(True)
 
     def _on_retrain(self) -> None:
         self._retrain_status.setText("Retraining in background…")
