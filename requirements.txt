@@ -1,8 +1,15 @@
-# OrgAIzer v1 dependencies
+# OrgAIzer dependencies
 # Install with: pip install -r requirements.txt
 
-# Desktop UI
+# Desktop UI (Qt — used by main.py on main branch)
 PySide6>=6.6.0
+
+# API backend (Tauri UI — used by main_api.py on feat/tauri-ui branch)
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+
+# Packaging
+pyinstaller>=6.0.0
 
 # File system monitoring
 watchdog>=4.0.0

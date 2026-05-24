@@ -38,7 +38,7 @@ def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
     For long-lived objects (e.g. Repository), store the connection as an attribute.
     """
     path = db_path or get_db_path()
-    conn = sqlite3.connect(str(path))
+    conn = sqlite3.connect(str(path), check_same_thread=False)
     conn.row_factory = sqlite3.Row          # rows accessible as dicts
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
