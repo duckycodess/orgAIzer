@@ -237,14 +237,18 @@ class MainWindow(QMainWindow):
         self._warmup_label.style().polish(self._warmup_label)
 
     def closeEvent(self, event: QCloseEvent) -> None:
-        event.ignore()
-        self.hide()
-        self._tray.showMessage(
-            "OrgAIzer",
-            "Still running in the background. Right-click the tray icon to quit.",
-            QSystemTrayIcon.MessageIcon.Information,
-            2000,
-        )
+        if QSystemTrayIcon.isSystemTrayAvailable() and self._tray.isVisible():
+            event.ignore()
+            self.hide()
+            self._tray.showMessage(
+                "OrgAIzer",
+                "Still running in the background. Right-click the tray icon to quit.",
+                QSystemTrayIcon.MessageIcon.Information,
+                2000,
+            )
+        else:
+            self._quit_app()
+            event.accept()
 
     def _show_window(self) -> None:
         self.show()
