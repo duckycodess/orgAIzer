@@ -146,9 +146,16 @@ class HistoryWidget(QWidget):
         self._table.setHorizontalHeaderLabels([
             "Time", "Filename", "Subject", "Confidence", "Action", "Actions"
         ])
-        self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        self._table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
+        hdr = self._table.horizontalHeader()
+        hdr.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        hdr.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
+        hdr.setMinimumSectionSize(60)
+        hdr.setStretchLastSection(False)
+        self._table.setColumnWidth(0, 140)
+        self._table.setColumnWidth(1, 240)
+        self._table.setColumnWidth(2, 130)
+        self._table.setColumnWidth(3, 90)
+        self._table.setColumnWidth(4, 110)
         self._table.setColumnWidth(5, 150)
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -180,7 +187,7 @@ class HistoryWidget(QWidget):
         ts = str(evt.get("timestamp", ""))
         if "T" in ts:
             date, time_ = ts.split("T", 1)
-            display_ts = f"{date}\n{time_}"
+            display_ts = f"{date} {time_[:8]}"
         else:
             display_ts = ts
 
