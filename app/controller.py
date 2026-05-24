@@ -131,6 +131,7 @@ class Controller(QObject):
 
         self._in_flight: set[str] = set()
         self._in_flight_lock = threading.Lock()
+        self._undo_pending_paths: dict[int, str] = {}  # event_id -> original_path
 
         self._watcher = FileWatcher(
             self._settings.effective_watch_folder,
@@ -196,6 +197,11 @@ class Controller(QObject):
         final_subject: str,
         action: str,   # accepted | corrected | skipped
     ) -> str | None:
+        # Release undo suppression for this event regardless of outcome.
+        undo_path = self._undo_pending_paths.pop(event_id, None)
+        if undo_path:
+            with self._in_flight_lock:
+                self._in_flight.discard(undo_path)
         event = self._event_repo.get_by_id(event_id)
         if not event:
             return None
@@ -350,10 +356,51 @@ class Controller(QObject):
         original = event.get("original_path")
         if not dest or not original:
             return False
+        # Suppress BEFORE the move so watchdog can't fire in the gap.
+        with self._in_flight_lock:
+            self._in_flight.add(original)
         success = undo_move(dest, original)
         if success:
             self._event_repo.update(event_id, stage="undone", user_action="undone")
+            # Re-queue as pending so the user can correct the subject.
+            # Suppression stays active until handle_user_decision is called.
+            self._queue_as_pending_after_undo(event, original)
+        else:
+            with self._in_flight_lock:
+                self._in_flight.discard(original)
         return success
+
+    def _queue_as_pending_after_undo(self, original_event: dict, original_path: str) -> None:
+        feature_text = original_event.get("feature_text") or ""
+        filename = original_event.get("filename") or Path(original_path).name
+        school_conf = float(original_event.get("school_confidence") or 0.0)
+        subject = original_event.get("course_predicted") or "Unknown"
+        subject_conf = float(original_event.get("course_confidence") or 0.0)
+        reason = f"[After undo] {original_event.get('prediction_reason') or ''}"
+
+        eid = self._event_repo.insert(
+            filename=filename,
+            original_path=original_path,
+            stage="pending",
+            school_confidence=school_conf,
+            subject_predicted=subject,
+            subject_confidence=subject_conf,
+            prediction_reason=reason,
+            feature_text=feature_text,
+            file_size=original_event.get("file_size") or 0,
+        )
+        self._undo_pending_paths[eid] = original_path
+        overall = min(school_conf, subject_conf) if subject_conf > 0 else school_conf
+        self.file_classified.emit({
+            "event_id": eid,
+            "filename": filename,
+            "original_path": original_path,
+            "subject": subject,
+            "overall_confidence": overall,
+            "school_confidence": school_conf,
+            "subject_confidence": subject_conf,
+            "reason": reason,
+        })
 
     def trigger_retrain(self) -> None:
         samples = self._sample_repo.get_all()

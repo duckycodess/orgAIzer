@@ -87,9 +87,9 @@ class SubjectPredictor:
                 conf = 0.50 + sim * 0.40
                 reason = f"Name similarity to {subject} ({sim:.0%})"
             else:
-                subject = self._known_subjects[0]
+                subject = "Unknown"
                 conf = 0.30
-                reason = "No strong subject signal; defaulting to first known subject"
+                reason = "No strong subject signal"
 
         if self._pipeline is not None:
             try:
