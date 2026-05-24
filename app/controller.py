@@ -40,6 +40,8 @@ logger = logging.getLogger(__name__)
 
 STRONG_SUBJECT_OVERRIDE = 0.82
 
+_SEED_EXTENSIONS = {".pdf", ".docx", ".txt", ".pptx", ".zip"}
+
 
 def _normalize_subject_name(subject: str) -> str:
     return " ".join(subject.strip().split())
@@ -190,6 +192,40 @@ class Controller(QObject):
 
     def scan_course_folders(self, school_root: str) -> int:
         return self.scan_subject_folders(school_root)
+
+    def seed_from_folder(self, folder: str) -> int:
+        """Read an organized school folder and insert bootstrap training samples."""
+        root = Path(folder)
+        if not root.is_dir():
+            return 0
+        count = 0
+        for subject_dir in sorted(root.iterdir()):
+            if not subject_dir.is_dir():
+                continue
+            subject_name = subject_dir.name
+            for file_path in sorted(subject_dir.rglob("*")):
+                if not file_path.is_file():
+                    continue
+                if file_path.suffix.lower() not in _SEED_EXTENSIONS:
+                    continue
+                stem_tokens = file_path.stem.replace("_", " ").replace("-", " ")
+                parent_tokens = " ".join(
+                    file_path.parent.relative_to(subject_dir).parts
+                )
+                text = " ".join(
+                    t for t in [stem_tokens, parent_tokens, subject_name] if t
+                )
+                self._sample_repo.insert(
+                    filename=file_path.name,
+                    text_features=json.dumps(text),
+                    extension=file_path.suffix.lower(),
+                    file_size=0,
+                    label_school=1,
+                    label_subject=subject_name,
+                    source="bootstrap",
+                )
+                count += 1
+        return count
 
     def handle_user_decision(
         self,
