@@ -1,0 +1,59 @@
+@font-face { font-family: "Inter"; src: url("/fonts/Inter-Regular.ttf"); font-weight: 400; }
+@font-face { font-family: "Inter"; src: url("/fonts/Inter-Medium.ttf");  font-weight: 500; }
+@font-face { font-family: "Inter"; src: url("/fonts/Inter-SemiBold.ttf");font-weight: 600; }
+@font-face { font-family: "Inter"; src: url("/fonts/Inter-Bold.ttf");    font-weight: 700; }
+
+:root {
+  --bg-base:      #06041a;
+  --bg-surface:   rgba(255, 255, 255, 0.03);
+  --bg-elevated:  rgba(255, 255, 255, 0.05);
+  --bg-hover:     rgba(255, 255, 255, 0.08);
+  --border:       rgba(255, 255, 255, 0.08);
+  --border-mid:   rgba(255, 255, 255, 0.12);
+  --border-strong:rgba(255, 255, 255, 0.20);
+
+  --violet:       #9d7dff;
+  --violet-dim:   rgba(157, 125, 255, 0.18);
+  --violet-hover: rgba(157, 125, 255, 0.35);
+  --violet-border:rgba(157, 125, 255, 0.45);
+  --violet-text:  #c8b8ff;
+
+  --cyan:         #00e5ff;
+  --cyan-dim:     rgba(0, 229, 255, 0.12);
+  --cyan-border:  rgba(0, 229, 255, 0.40);
+
+  --green:        #4ade80;
+  --green-dim:    rgba(74, 222, 128, 0.12);
+  --yellow:       #ffb347;
+  --red:          #ff6b9d;
+  --red-dim:      rgba(255, 90, 130, 0.12);
+  --red-border:   rgba(255, 90, 130, 0.50);
+
+  --text-primary:  #ede9ff;
+  --text-secondary:#a89ec9;
+  --text-muted:    #7b6fa8;
+  --text-dim:      #4e4875;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #root {
+  height: 100%;
+  font-family: "Inter", "Segoe UI", "Ubuntu", sans-serif;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+button { font-family: inherit; cursor: pointer; border: none; outline: none; }
+input, select, textarea { font-family: inherit; outline: none; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(157,125,255,0.45); }
