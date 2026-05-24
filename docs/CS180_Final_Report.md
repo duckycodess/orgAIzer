@@ -342,16 +342,24 @@ All measured inference times are well within the 2-second requirement. PDF extra
 
 ### UI Design
 
-> **[TODO: Insert screenshots of the application here, one per tab: (1) Pending Decisions tab showing a file awaiting review, (2) History tab with logged entries, (3) Settings tab. Also include a screenshot of the system tray icon if possible.]**
+![Pending Decisions tab](ss_pending.png)
+*Figure 1: Pending Decisions tab showing 2 files awaiting review with confidence scores and classifier reasoning.*
+
+![History tab](ss_history.png)
+*Figure 2: History tab displaying logged file classification events.*
+
+![Settings tab](ss_settings.png)
+*Figure 3: Settings tab for configuring watch folder, thresholds, and model options.*
 
 OrgAIzer's interface is a three-tab desktop window with a dark theme, designed to require minimal interaction from the user during normal operation.
 
 **Tab 1: Pending Decisions**
 
 This tab shows files that the model classified with medium confidence (between 0.55 and 0.85), or files that were classified as school-related but whose subject folder could not be determined with high confidence. Each entry displays:
-- The filename
-- The predicted subject and confidence percentage (e.g., "Predicted: Speech, 72%")
-- Three action buttons: **Accept** (move to predicted folder), **Change** (select a different subject from a dropdown), and **Skip** (mark as not school-related)
+- The filename and predicted subject folder
+- Confidence scores for both the school detection step and the subject prediction step (e.g., School: 90%, Subject: 96%)
+- A **Reason** field explaining how the prediction was made (e.g., "Found course code pattern in filename/content | Matched subject code CS180")
+- Three action buttons: **Accept** (move to predicted folder), **Correct** (select a different subject from a dropdown), and **Not School** (mark as not school-related)
 
 This is the primary interaction surface. A student using OrgAIzer daily might spend 10–30 seconds here reviewing 2–5 uncertain files.
 
